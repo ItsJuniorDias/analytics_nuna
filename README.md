@@ -222,7 +222,7 @@ curl -sS -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:8000/v1/stats/books
 curl -sS -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:8000/v1/stats/paywall"
 ```
 
-### Painel: `GET /dashboard`
+### Painel: `GET /`
 
 HTML, CSS e JS próprios, sem CDN (a CSP proíbe qualquer origem externa). A página não tem dados: pede o token de admin, guarda em `sessionStorage` (some quando a aba fecha) e chama as rotas acima. Mostra visão geral com gráficos de barras em SVG, funis prontos (Ativação, Leitura, Monetização, Livro bloqueado), livros, paywall e um explorador por evento. Todo gráfico tem tabela equivalente.
 
@@ -233,7 +233,7 @@ cd analytics_nuna
 cp .env.example .env        # preencha NUNA_APP_KEYS e NUNA_ADMIN_TOKEN
 make setup                  # cria .venv e instala requirements.txt
 make test                   # pytest
-make run                    # http://127.0.0.1:8000 (painel em /dashboard)
+make run                    # http://127.0.0.1:8000 (painel na raiz)
 ```
 
 Sem `make`:
@@ -283,7 +283,7 @@ SQLite precisa de **disco persistente**. Sem ele, o sistema de arquivos do Rende
 1. Suba este repositório no GitHub.
 2. Render > **New** > **Blueprint** > escolha o repositório. O `render.yaml` cria o Web Service `nuna-analytics` (runtime Docker, plano `starter`, 1 instância, health check em `/health`) com disco `nuna-analytics-data` de 1 GB montado em `/data`.
 3. Preencha `NUNA_APP_KEYS` quando o Render pedir. `NUNA_ADMIN_TOKEN` é gerado automaticamente; copie em Environment.
-4. Depois do deploy: `curl https://<serviço>.onrender.com/health` e abra `/dashboard`.
+4. Depois do deploy: `curl https://<serviço>.onrender.com/health` e abra a raiz do serviço (`/dashboard` redireciona para ela).
 5. Aponte um domínio próprio (ex. `analytics.<seu-domínio>`) e use essa URL no app.
 
 Consequências do disco no Render: exige plano pago; só 1 instância; sem zero-downtime deploy (alguns segundos fora do ar por deploy, sem perda, porque o app mantém a fila e reenvia). Medido localmente, cada evento ocupa cerca de 700 bytes com índices: 1 GB guarda perto de 1,5 milhão de eventos, ou uns 8 mil por dia com 180 dias de retenção. Aumente `sizeGB` se o volume passar disso (o disco cresce, não diminui).

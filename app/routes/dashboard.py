@@ -1,4 +1,4 @@
-"""GET /dashboard: painel estático (HTML + JS puro, sem CDN).
+"""GET /: painel estático (HTML + JS puro, sem CDN).
 
 A página em si não tem dado nenhum; ela pede o token de admin e chama as rotas
 /v1/stats do mesmo domínio. Por isso pode ser servida sem autenticação.
@@ -7,7 +7,7 @@ A página em si não tem dado nenhum; ela pede o token de admin e chama as rotas
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -21,9 +21,15 @@ ASSETS = {
 router = APIRouter(include_in_schema=False)
 
 
-@router.get("/dashboard")
+@router.get("/")
 def dashboard() -> FileResponse:
     return FileResponse(STATIC_DIR / "dashboard.html", media_type="text/html; charset=utf-8")
+
+
+@router.get("/dashboard")
+def dashboard_old_path() -> RedirectResponse:
+    # O painel morava em /dashboard; link salvo continua abrindo.
+    return RedirectResponse(url="/", status_code=308)
 
 
 @router.get("/dashboard/{asset}")

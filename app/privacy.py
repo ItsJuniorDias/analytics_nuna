@@ -83,7 +83,8 @@ class SecurityHeadersMiddleware:
                 headers = list(message.get("headers") or [])  # type: ignore[call-overload]
                 headers.append((b"x-content-type-options", b"nosniff"))
                 headers.append((b"referrer-policy", b"no-referrer"))
-                if path.startswith("/dashboard"):
+                # "/" é o painel; "/dashboard/..." são os arquivos dele.
+                if path == "/" or path.startswith("/dashboard"):
                     headers.append((b"content-security-policy", DASHBOARD_CSP.encode("ascii")))
                     headers.append((b"cache-control", b"no-store"))
                 elif path.startswith("/v1/stats"):
