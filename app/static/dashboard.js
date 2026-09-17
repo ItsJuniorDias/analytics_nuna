@@ -427,11 +427,12 @@
   function refreshAll() {
     var status = $("status");
     status.textContent = "Carregando…";
+    // Na ordem da página: paywall e compras primeiro, a seção mais importante.
     return Promise.all([
+      guarded(loadPaywall(), $("table-gate")),
       guarded(loadOverview(), $("table-top")),
       loadFunnel(),
       guarded(loadBooks(), $("table-books")),
-      guarded(loadPaywall(), $("table-gate")),
       loadExplore()
     ]).then(function () {
       status.textContent = "Atualizado às " + new Date().toLocaleTimeString("pt-BR") + " · período " + $("from").value + " a " + $("to").value + " (UTC)";
