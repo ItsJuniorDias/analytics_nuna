@@ -33,13 +33,13 @@ STRING_TOO_LONG = "string_too_long"
 
 # Formato que o app envia (Nuna/Services/Analytics.swift, CorpoDoEnvio):
 #
-#   {"context": {session_id, app_version, build, os_version, device_family},
+#   {"context": {session_id, app_version, build, os_version, device_family, storefront?},
 #    "events": [{event_id, name, timestamp, properties, layout?, subscription_state}]}
 #
 # O app só junta num lote eventos com o mesmo contexto, então o que não muda
 # dentro da sessão vai uma vez por lote. layout e subscription_state mudam no
 # meio da sessão (dobrar o Duo, comprar) e vão em cada evento.
-BATCH_CONTEXT_FIELDS = ("session_id", "app_version", "build", "os_version", "device_family")
+BATCH_CONTEXT_FIELDS = ("session_id", "app_version", "build", "os_version", "device_family", "storefront")
 EVENT_CONTEXT_FIELDS = ("event_id", "timestamp", "layout", "subscription_state")
 EVENT_FIELDS = ("event_id", "name", "timestamp", "properties", "layout", "subscription_state")
 
@@ -54,9 +54,14 @@ CONTEXT_FIELDS = (
     "build",
     "os_version",
     "device_family",
+    "storefront",
     "layout",
     "subscription_state",
 )
+
+# Campos de contexto que podem faltar (coluna NULL): layout só existe no leitor,
+# e o StoreKit nem sempre informa a loja (sem conta Apple, sem rede).
+OPTIONAL_CONTEXT_FIELDS = ("layout", "storefront")
 
 SUPPORTED_TYPES = ("string", "integer", "boolean")
 _NAME_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
@@ -179,6 +184,7 @@ class ValidEvent:
     build: str
     os_version: str
     device_family: str
+    storefront: Optional[str]
     layout: Optional[str]
     subscription_state: str
     properties: Mapping[str, JSONScalar]
@@ -331,7 +337,7 @@ class Catalog:
         for name, spec in raw_context.items():
             context[name] = _load_property("context", name, spec)
         for name in CONTEXT_FIELDS:
-            if name != "layout" and not context[name].required:
+            if name not in OPTIONAL_CONTEXT_FIELDS and not context[name].required:
                 raise CatalogError("context.%s precisa ser obrigatório (coluna NOT NULL)" % name)
             if name in ("event_id", "session_id", "timestamp") and context[name].pattern is None:
                 raise CatalogError("context.%s precisa de pattern" % name)
@@ -462,6 +468,7 @@ class Catalog:
         clean_properties = self._check_object(spec.properties, properties, "properties")
 
         layout = fields.get("layout")
+        storefront = context.get("storefront")
         return ValidEvent(
             event_id=str(fields["event_id"]),
             name=name,
@@ -471,6 +478,7 @@ class Catalog:
             build=str(context["build"]),
             os_version=str(context["os_version"]),
             device_family=str(context["device_family"]),
+            storefront=None if storefront is None else str(storefront),
             layout=None if layout is None else str(layout),
             subscription_state=str(fields["subscription_state"]),
             properties=clean_properties,

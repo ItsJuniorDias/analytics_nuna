@@ -229,6 +229,7 @@ def test_catalog_file_is_version_1_with_38_events(catalog):
         "build",
         "os_version",
         "device_family",
+        "storefront",
         "layout",
         "subscription_state",
     ]

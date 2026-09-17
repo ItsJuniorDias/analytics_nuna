@@ -78,6 +78,8 @@ def test_schema_has_no_ip_or_user_agent_columns(client, catalog, settings):
         "layout",
         "subscription_state",
         "properties",
+        # migração 2: país da conta da App Store (ISO alfa-3), não localização
+        "storefront",
     ]
 
 

@@ -98,7 +98,8 @@ Corpo: o formato que o app manda (`CorpoDoEnvio` em `Nuna/Services/Analytics.swi
     "app_version": "1.0",
     "build": "12",
     "os_version": "27.0",
-    "device_family": "phone"
+    "device_family": "phone",
+    "storefront": "BRA"
   },
   "events": [
     {
@@ -124,7 +125,7 @@ Corpo: o formato que o app manda (`CorpoDoEnvio` em `Nuna/Services/Analytics.swi
 ```
 
 Regras:
-- Contexto do lote: exatamente `session_id`, `app_version`, `build`, `os_version`, `device_family`. Erro nele recusa todos os eventos do lote com o mesmo motivo (`"invalid_enum: context.device_family"`); `context` ausente ou que não é objeto dá `422 invalid_envelope`.
+- Contexto do lote: `session_id`, `app_version`, `build`, `os_version`, `device_family` e, opcional, `storefront` (país da conta da App Store, ISO alfa-3, ex. `BRA`). Erro nele recusa todos os eventos do lote com o mesmo motivo (`"invalid_enum: context.device_family"`); `context` ausente ou que não é objeto dá `422 invalid_envelope`.
 - Evento: `event_id`, `name`, `timestamp`, `properties`, `subscription_state` obrigatórios; `layout` opcional. Qualquer outro campo (inclusive `context` ou `session_id` dentro do evento) é recusado. Os motivos desses campos vêm sem prefixo (`"invalid_enum: layout"`).
 - Os valores seguem `catalog.context` (contexto e campos de evento) e `catalog.events[name].properties`.
 - Opcional ausente = não se aplica. **Nunca** mandar `null` nem string vazia.
@@ -360,10 +361,11 @@ Declarar os tipos abaixo. Em **todos**: *Linked to the user's identity* = **No**
 | Usage Data > **Product Interaction** | Analytics | `app_opened/foregrounded/backgrounded`, `onboarding_*`, `screen_viewed`, `home_section_viewed`, `library_filter/sort_changed`, `book_opened`, `page_turned`, `book_completed`, `reader_*`, `paywall_viewed/closed`, `plan_selected`, `subscribe_tapped`, `parental_gate_*`, `restore_tapped`, `reading_progress_reset` |
 | Purchases > **Purchase History** | Analytics | `purchase_completed/pending/cancelled/failed`, `restore_finished`, `subscription_status_changed` (tipo de plano e resultado; não é ligado a ninguém, mas é informação sobre compras, então declare) |
 | **Search History** | Analytics | `library_search_performed` (que houve busca, faixa de tamanho e número de resultados, nunca o texto). Se não quiser esse rótulo num app Kids, remova esse evento do catálogo antes do lançamento; nada depende dele |
+| Location > **Coarse Location** | Analytics | `storefront` no contexto: país da conta da App Store (`BRA`, `USA`). Não é a posição do aparelho e o app não usa localização, mas país da conta descreve onde a pessoa provavelmente está; declarar é o caminho conservador. Se preferir não ter esse rótulo num app Kids, tire `storefront` do app e do catálogo |
 | Diagnostics > **Performance Data** | App Functionality, Analytics | `catalog_loaded.load_duration_bucket`, `store_products_loaded.duration_bucket` |
 | Diagnostics > **Other Diagnostic Data** | App Functionality, Analytics | `store_products_load_failed`, origem do catálogo e contagem de assets faltando em `catalog_loaded`, `page_art_fallback_shown`, `book_opened.resume_state = reset_invalid` |
 
-**Não declarar:** Contact Info, Health & Fitness, Financial Info, Location, Sensitive Info, Contacts, User Content, Browsing History, Identifiers (User ID ou Device ID: `session_id` é aleatório por lançamento e não persiste, então não é nenhum dos dois), Crash Data (não há crash reporter), Advertising Data, Other Usage Data, Other Data.
+**Não declarar:** Contact Info, Health & Fitness, Financial Info, Precise Location, Sensitive Info, Contacts, User Content, Browsing History, Identifiers (User ID ou Device ID: `session_id` é aleatório por lançamento e não persiste, então não é nenhum dos dois), Crash Data (não há crash reporter), Advertising Data, Other Usage Data, Other Data.
 
 ### Privacy manifest (`Nuna/PrivacyInfo.xcprivacy`)
 

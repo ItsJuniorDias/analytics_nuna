@@ -8,6 +8,7 @@
     "build": {"type": "string", "required": true, "pattern": "^[0-9]{1,8}(\\.[0-9]{1,4}){0,2}$"},
     "os_version": {"type": "string", "required": true, "pattern": "^[0-9]{1,3}(\\.[0-9]{1,3}){0,2}$"},
     "device_family": {"type": "string", "required": true, "enum": ["phone", "pad", "other"]},
+    "storefront": {"type": "string", "required": false, "pattern": "^[A-Z]{3}$", "description": "App Store account country (StoreKit Storefront.countryCode, ISO 3166-1 alpha-3, e.g. BRA). The Apple account's store, not the device location. Omitted when StoreKit does not report it."},
     "layout": {"type": "string", "required": false, "enum": ["single", "spread", "unknown"]},
     "subscription_state": {"type": "string", "required": true, "enum": ["premium", "free", "unknown"]}
   },

@@ -10,7 +10,7 @@
 
   var TOKEN_KEY = "nuna.analytics.adminToken";
   var SVG_NS = "http://www.w3.org/2000/svg";
-  var CONTEXT_FIELDS = ["app_version", "build", "os_version", "device_family", "layout", "subscription_state"];
+  var CONTEXT_FIELDS = ["app_version", "build", "os_version", "device_family", "storefront", "layout", "subscription_state"];
   var DEFAULT_FUNNEL = "paywall_viewed,subscribe_tapped,parental_gate_shown:purpose=subscribe,parental_gate_passed:purpose=subscribe,purchase_completed";
 
   var memoryToken = null; // se sessionStorage estiver bloqueado
@@ -20,6 +20,53 @@
   var monthNames = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 
   function $(id) { return document.getElementById(id); }
+
+  // Países ------------------------------------------------------------------
+  //
+  // O app manda o país da conta da App Store em ISO 3166-1 alfa-3 (é o que o
+  // StoreKit dá: "BRA"). Bandeira e nome precisam do alfa-2 ("BR"). Tabela
+  // tirada do ICU (uloc_getISO3Country), 5 letras por país: alfa-3 + alfa-2.
+  var ISO3_TO_ISO2 = (function () {
+    var packed =
+    "ABWAW AFGAF AGOAO AIAAI ALAAX ALBAL ANDAD AREAE ARGAR ARMAM ASCAC ASMAS ATAAQ ATFTF ATGAG AUSAU " +
+    "AUTAT AZEAZ BDIBI BELBE BENBJ BESBQ BFABF BGDBD BGRBG BHRBH BHSBS BIHBA BLMBL BLRBY BLZBZ BMUBM " +
+    "BOLBO BRABR BRBBB BRNBN BTNBT BVTBV BWABW CAFCF CANCA CCKCC CHECH CHLCL CHNCN CIVCI CMRCM CODCD " +
+    "COGCG COKCK COLCO COMKM CPTCP CPVCV CRICR CRQCQ CUBCU CUWCW CXRCX CYMKY CYPCY CZECZ DEUDE DGADG " +
+    "DJIDJ DMADM DNKDK DOMDO DZADZ ECUEC EGYEG ERIER ESHEH ESPES ESTEE ETHET FINFI FJIFJ FLKFK FRAFR " +
+    "FROFO FSMFM GABGA GBRGB GEOGE GGYGG GHAGH GIBGI GINGN GLPGP GMBGM GNBGW GNQGQ GRCGR GRDGD GRLGL " +
+    "GTMGT GUFGF GUMGU GUYGY HKGHK HMDHM HNDHN HRVHR HTIHT HUNHU IDNID IMNIM INDIN IOTIO IRLIE IRNIR " +
+    "IRQIQ ISLIS ISRIL ITAIT JAMJM JEYJE JORJO JPNJP KAZKZ KENKE KGZKG KHMKH KIRKI KNAKN KORKR KWTKW " +
+    "LAOLA LBNLB LBRLR LBYLY LCALC LIELI LKALK LSOLS LTULT LUXLU LVALV MACMO MAFMF MARMA MCOMC MDAMD " +
+    "MDGMG MDVMV MEXMX MHLMH MKDMK MLIML MLTMT MMRMM MNEME MNGMN MNPMP MOZMZ MRTMR MSRMS MTQMQ MUSMU " +
+    "MWIMW MYSMY MYTYT NAMNA NCLNC NERNE NFKNF NGANG NICNI NIUNU NLDNL NORNO NPLNP NRUNR NZLNZ OMNOM " +
+    "PAKPK PANPA PCNPN PERPE PHLPH PLWPW PNGPG POLPL PRIPR PRKKP PRTPT PRYPY PSEPS PYFPF QATQA REURE " +
+    "ROURO RUSRU RWARW SAUSA SDNSD SENSN SGPSG SGSGS SHNSH SJMSJ SLBSB SLESL SLVSV SMRSM SOMSO SPMPM " +
+    "SRBRS SSDSS STPST SURSR SVKSK SVNSI SWESE SWZSZ SXMSX SYCSC SYRSY TAATA TCATC TCDTD TGOTG THATH " +
+    "TJKTJ TKLTK TKMTM TLSTL TONTO TTOTT TUNTN TURTR TUVTV TWNTW TZATZ UGAUG UKRUA UMIUM URYUY USAUS " +
+    "UZBUZ VATVA VCTVC VENVE VGBVG VIRVI VNMVN VUTVU WLFWF WSMWS XEAEA XICIC XKKXK YEMYE ZAFZA ZMBZM " +
+    "ZWEZW";
+    var map = {};
+    packed.split(" ").forEach(function (item) { map[item.slice(0, 3)] = item.slice(3); });
+    return map;
+  })();
+
+  var regionNames = null;
+  try { regionNames = new Intl.DisplayNames(["pt-BR"], { type: "region" }); } catch (e) { /* navegador antigo: fica o código */ }
+
+  /** Bandeira em emoji: cada letra do alfa-2 vira um "regional indicator". */
+  function flag(iso2) {
+    return String.fromCodePoint(0x1F1E6 + iso2.charCodeAt(0) - 65, 0x1F1E6 + iso2.charCodeAt(1) - 65);
+  }
+
+  /** "BRA" -> "🇧🇷 Brasil"; sem país -> "🏳️ Não informado". */
+  function countryText(iso3) {
+    if (iso3 === null || iso3 === undefined) return "\u{1F3F3}\uFE0F Não informado";
+    var iso2 = ISO3_TO_ISO2[iso3];
+    if (!iso2) return iso3;
+    var name = iso2;
+    try { if (regionNames) name = regionNames.of(iso2) || iso2; } catch (e) { /* fica o código */ }
+    return flag(iso2) + " " + name;
+  }
 
   // DOM ---------------------------------------------------------------------
 
@@ -258,6 +305,7 @@
         var v = r[c.key];
         if (c.kind === "num") return el("td", { className: "num", text: fmt(v) });
         if (c.kind === "pct") return el("td", { className: "num", text: pct(v) });
+        if (c.kind === "country") return el("td", { className: "country", text: countryText(v), title: v == null ? "" : v });
         return el("td", { className: c.kind === "code" ? "code" : "", text: valueText(v) });
       });
       if (barKey) cells.push(el("td", { className: "barcell" }, [inlineBar(r[barKey] || 0, max)]));
@@ -298,6 +346,11 @@
         { key: "events", label: "Eventos", kind: "num" },
         { key: "sessions", label: "Sessões", kind: "num" }
       ], data.days.slice().reverse());
+      table($("table-countries"), [
+        { key: "storefront", label: "País", kind: "country" },
+        { key: "sessions", label: "Sessões", kind: "num" },
+        { key: "events", label: "Eventos", kind: "num" }
+      ], data.storefronts, "sessions");
       table($("table-top"), [
         { key: "name", label: "Evento", kind: "code" },
         { key: "count", label: "Total", kind: "num" }
@@ -344,6 +397,13 @@
         { label: "Compras concluídas", value: fmt(data.purchases_completed) },
         { label: "Visualização → compra", value: pct(data.view_to_purchase_rate) }
       ]);
+      table($("table-paywall-countries"), [
+        { key: "storefront", label: "País", kind: "country" },
+        { key: "views", label: "Visualizações", kind: "num" },
+        { key: "subscribe_taps", label: "Toques em assinar", kind: "num" },
+        { key: "purchases_completed", label: "Compras", kind: "num" },
+        { key: "view_to_purchase_rate", label: "Visualização → compra", kind: "pct" }
+      ], data.by_storefront, "purchases_completed");
       var valueCols = [{ key: "value", label: "Valor", kind: "code" }, { key: "count", label: "Total", kind: "num" }];
       table($("table-views"), valueCols, data.views_by_source, "count");
       table($("table-closes"), valueCols, data.closes_by_reason, "count");
@@ -407,7 +467,7 @@
       }
       var columns = [];
       if (data.group === "day") columns.push({ key: "day", label: "Dia", kind: "text" });
-      if (data.by) columns.push({ key: "value", label: data.by, kind: "code" });
+      if (data.by) columns.push({ key: "value", label: data.by === "storefront" ? "País" : data.by, kind: data.by === "storefront" ? "country" : "code" });
       columns.push({ key: "count", label: "Total", kind: "num" });
       table($("explore-table"), columns, data.rows, "count");
     }).catch(function (error) {

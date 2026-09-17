@@ -62,6 +62,14 @@ MIGRATIONS: Sequence[Tuple[int, Sequence[str]]] = (
             """,
         ),
     ),
+    (
+        2,
+        (
+            # País da conta da App Store (ISO alfa-3), não localização do
+            # aparelho. NULL em eventos antigos e quando o StoreKit não informa.
+            "ALTER TABLE events ADD COLUMN storefront TEXT",
+        ),
+    ),
 )
 
 _initialized = set()

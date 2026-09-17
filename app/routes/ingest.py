@@ -33,8 +33,8 @@ MAX_INTEGER_DIGITS = 32
 
 INSERT_SQL = (
     "INSERT INTO events (event_id, name, session_id, ts, received_at, catalog_version,"
-    " app_version, build, os_version, device_family, layout, subscription_state, properties)"
-    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    " app_version, build, os_version, device_family, storefront, layout, subscription_state, properties)"
+    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     # Reenvio do mesmo event_id (resposta perdida, app morto antes de limpar a
     # fila) não é erro: o primeiro gravado vale e o repetido conta como duplicado.
     " ON CONFLICT (event_id) DO NOTHING"
@@ -119,6 +119,7 @@ def store_events(db_path: str, events: Sequence[ValidEvent], catalog_version: in
                     e.build,
                     e.os_version,
                     e.device_family,
+                    e.storefront,
                     e.layout,
                     e.subscription_state,
                     e.properties_json(),

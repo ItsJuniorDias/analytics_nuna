@@ -76,12 +76,19 @@ class OverviewTotals(BaseModel):
     sessions: int
 
 
+class StorefrontCount(BaseModel):
+    storefront: Optional[str] = Field(description="ISO 3166-1 alfa-3 da loja da App Store; null quando não informado.")
+    sessions: int
+    events: int
+
+
 class OverviewResponse(BaseModel):
     from_: str = Field(alias="from")
     to: str
     totals: OverviewTotals
     days: List[DayCount]
     top_events: List[NameCount]
+    storefronts: List[StorefrontCount]
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -157,6 +164,14 @@ class PurchaseRow(BaseModel):
     count: int
 
 
+class PaywallStorefrontRow(BaseModel):
+    storefront: Optional[str] = None
+    views: int
+    subscribe_taps: int
+    purchases_completed: int
+    view_to_purchase_rate: Optional[float] = None
+
+
 class PaywallResponse(BaseModel):
     from_: str = Field(alias="from")
     to: str
@@ -170,5 +185,6 @@ class PaywallResponse(BaseModel):
     view_to_purchase_rate: Optional[float] = None
     closes_by_reason: List[ValueCount]
     restores_by_result: List[ValueCount]
+    by_storefront: List[PaywallStorefrontRow]
 
     model_config = ConfigDict(populate_by_name=True)

@@ -29,6 +29,7 @@ GROUPABLE_CONTEXT_COLUMNS = {
     "build": "build",
     "os_version": "os_version",
     "device_family": "device_family",
+    "storefront": "storefront",
     "layout": "layout",
     "subscription_state": "subscription_state",
 }
@@ -137,6 +138,14 @@ def overview(conn: sqlite3.Connection, rng: DateRange) -> Dict[str, Any]:
         " GROUP BY name ORDER BY n DESC, name",
         rng.bounds,
     ).fetchall()
+    # País da conta da App Store. NULL (StoreKit não informou, ou evento de
+    # antes do campo existir) vira uma linha própria, no fim.
+    storefronts = conn.execute(
+        "SELECT storefront, COUNT(DISTINCT session_id) AS sessions, COUNT(*) AS events"
+        " FROM events WHERE ts >= ? AND ts < ?"
+        " GROUP BY storefront ORDER BY storefront IS NULL, sessions DESC, storefront",
+        rng.bounds,
+    ).fetchall()
     return {
         "from": rng.start.isoformat(),
         "to": rng.end.isoformat(),
@@ -148,6 +157,10 @@ def overview(conn: sqlite3.Connection, rng: DateRange) -> Dict[str, Any]:
             for d in rng.days()
         ],
         "top_events": [{"name": r["name"], "count": int(r["n"])} for r in top],
+        "storefronts": [
+            {"storefront": r["storefront"], "sessions": int(r["sessions"]), "events": int(r["events"])}
+            for r in storefronts
+        ],
     }
 
 
@@ -432,4 +445,32 @@ def paywall(conn: sqlite3.Connection, catalog: Catalog, rng: DateRange) -> Dict[
         "view_to_purchase_rate": _rate(purchases_completed, views_total),
         "closes_by_reason": _count_by_property(conn, catalog, rng, "paywall_closed", "reason"),
         "restores_by_result": _count_by_property(conn, catalog, rng, "restore_finished", "result"),
+        "by_storefront": _paywall_by_storefront(conn, rng),
     }
+
+
+def _paywall_by_storefront(conn: sqlite3.Connection, rng: DateRange) -> List[Dict[str, Any]]:
+    """Visualizações, toques em assinar e compras concluídas por país da loja,
+    do país que mais vende para o que menos vende."""
+    rows = conn.execute(
+        "SELECT storefront,"
+        " SUM(name = 'paywall_viewed') AS views,"
+        " SUM(name = 'subscribe_tapped') AS taps,"
+        " SUM(name = 'purchase_completed') AS purchases"
+        " FROM events"
+        " WHERE name IN ('paywall_viewed', 'subscribe_tapped', 'purchase_completed')"
+        " AND ts >= ? AND ts < ?"
+        " GROUP BY storefront"
+        " ORDER BY storefront IS NULL, purchases DESC, views DESC, storefront",
+        rng.bounds,
+    ).fetchall()
+    return [
+        {
+            "storefront": r["storefront"],
+            "views": int(r["views"]),
+            "subscribe_taps": int(r["taps"]),
+            "purchases_completed": int(r["purchases"]),
+            "view_to_purchase_rate": _rate(int(r["purchases"]), int(r["views"])),
+        }
+        for r in rows
+    ]

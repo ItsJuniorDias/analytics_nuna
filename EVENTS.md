@@ -10,7 +10,7 @@ Fonte da verdade: `events.json` (versão 1). Este documento espelha o JSON; se d
 - Contadores inteiros são limitados no cliente ao `maximum` do catálogo.
 - Durações são sempre faixas (buckets), medidas com `Date`, nunca valores exatos.
 - O backend rejeita evento com nome desconhecido, propriedade fora do catálogo, enum inválido ou inteiro fora da faixa.
-- Envelope do upload: `{"context": {session_id, app_version, build, os_version, device_family}, "events": [{event_id, name, timestamp, properties, layout?, subscription_state}]}`. O contexto vale para o lote; `event_id`, `timestamp`, `layout` e `subscription_state` vão em cada evento.
+- Envelope do upload: `{"context": {session_id, app_version, build, os_version, device_family, storefront?}, "events": [{event_id, name, timestamp, properties, layout?, subscription_state}]}`. O contexto vale para o lote; `event_id`, `timestamp`, `layout` e `subscription_state` vão em cada evento.
 
 ## Contexto comum (do lote ou de cada evento, ver envelope acima)
 
@@ -23,6 +23,7 @@ Fonte da verdade: `events.json` (versão 1). Este documento espelha o JSON; se d
 | `build` | string | sim | `^[0-9]{1,8}(\.[0-9]{1,4}){0,2}$` | `CFBundleVersion` |
 | `os_version` | string | sim | `^[0-9]{1,3}(\.[0-9]{1,3}){0,2}$` | `ProcessInfo.processInfo.operatingSystemVersion` |
 | `device_family` | string | sim | `phone` \| `pad` \| `other` | `userInterfaceIdiom`: phone (inclui o Duo), pad, other; nunca modelo ou nome |
+| `storefront` | string | não | `^[A-Z]{3}$` | país da conta da App Store (`Storefront.countryCode`, ISO 3166-1 alfa-3, ex. `BRA`); a loja da conta Apple, não a localização do aparelho; omitido quando o StoreKit não informa |
 | `layout` | string | não | `single` \| `spread` \| `unknown` | só enquanto um leitor está aberto: single/spread; `unknown` antes da primeira medida; ausente fora do leitor |
 | `subscription_state` | string | sim | `premium` \| `free` \| `unknown` | `unknown` até a primeira `atualizarAssinatura` do processo terminar; depois premium/free |
 
