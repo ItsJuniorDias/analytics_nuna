@@ -18,7 +18,7 @@ from .catalog import Catalog
 from .config import Settings
 from .privacy import PrivacyScrubMiddleware, SecurityHeadersMiddleware
 from .purge import PurgeScheduler
-from .routes import dashboard, ingest, stats
+from .routes import admin, dashboard, ingest, stats
 
 logger = logging.getLogger("nuna.analytics")
 
@@ -75,6 +75,7 @@ def create_app(settings: Optional[Settings] = None, catalog: Optional[Catalog] =
 
     app.include_router(ingest.router)
     app.include_router(stats.router)
+    app.include_router(admin.router)
     app.include_router(dashboard.router)
 
     if settings.cors_origins:

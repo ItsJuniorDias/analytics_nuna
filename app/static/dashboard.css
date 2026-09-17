@@ -136,6 +136,11 @@ input:focus-visible, select:focus-visible, button:focus-visible, summary:focus-v
 }
 
 .button.quiet:hover { border-color: var(--muted); }
+/* Ação destrutiva: contorno no acento, sem o fundo cheio do botão primário. */
+.button.danger { background: transparent; color: var(--accent); border-color: var(--accent); }
+.button.danger:hover { background: var(--accent); color: #F7F3E9; }
+.button:disabled { opacity: 0.5; cursor: default; }
+.top-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .button.primary:hover { filter: brightness(0.94); }
 
 .filters {

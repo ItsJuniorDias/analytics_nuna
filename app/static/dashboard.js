@@ -124,6 +124,7 @@
     setToken(null);
     $("app").hidden = true;
     $("logout").hidden = true;
+    $("clear-events").hidden = true;
     $("login").hidden = false;
     var error = $("login-error");
     error.textContent = message || "";
@@ -136,13 +137,14 @@
     $("login").hidden = true;
     $("app").hidden = false;
     $("logout").hidden = false;
+    $("clear-events").hidden = false;
   }
 
   // API -----------------------------------------------------------------------
 
   function AuthError() { this.name = "AuthError"; }
 
-  function api(path, params) {
+  function api(path, params, method) {
     var url = new URL(path, window.location.origin);
     Object.keys(params || {}).forEach(function (key) {
       if (params[key] !== undefined && params[key] !== null && params[key] !== "") {
@@ -152,9 +154,9 @@
     var headers = {};
     var token = getToken();
     if (token) headers.Authorization = "Bearer " + token;
-    return fetch(url.toString(), { headers: headers, cache: "no-store", credentials: "omit" })
+    return fetch(url.toString(), { method: method || "GET", headers: headers, cache: "no-store", credentials: "omit" })
       .then(function (res) {
-        if (res.status === 401 && path.indexOf("/v1/stats") === 0) throw new AuthError();
+        if (res.status === 401 && (path.indexOf("/v1/stats") === 0 || path.indexOf("/v1/admin") === 0)) throw new AuthError();
         return res.json().catch(function () { return {}; }).then(function (body) {
           if (!res.ok) {
             var detail = typeof body.detail === "string" ? body.detail : "HTTP " + res.status;
@@ -484,6 +486,36 @@
     });
   }
 
+  // Limpar eventos ----------------------------------------------------------------
+
+  /** Apaga TODOS os eventos no servidor. Pede para digitar LIMPAR: um clique
+   *  sem querer não pode zerar o painel. */
+  function clearEvents() {
+    var status = $("status");
+    var answer = window.prompt(
+      "Isso apaga TODOS os eventos do servidor, de todos os períodos, e não tem volta.\n\n" +
+      "Digite LIMPAR para confirmar."
+    );
+    if (answer === null) return;
+    if (answer.trim().toUpperCase() !== "LIMPAR") {
+      status.textContent = "Nada foi apagado: a confirmação não bateu.";
+      return;
+    }
+    var button = $("clear-events");
+    button.disabled = true;
+    status.textContent = "Apagando eventos…";
+    api("/v1/admin/events", null, "DELETE").then(function (data) {
+      return refreshAll().then(function () {
+        status.textContent = fmt(data.deleted_events) + " eventos apagados.";
+      });
+    }).catch(function (error) {
+      if (error instanceof AuthError) showLogin("Token inválido ou sem acesso.");
+      else status.textContent = "Erro ao apagar: " + error.message;
+    }).then(function () {
+      button.disabled = false;
+    });
+  }
+
   function refreshAll() {
     var status = $("status");
     status.textContent = "Carregando…";
@@ -541,6 +573,7 @@
     });
 
     $("logout").addEventListener("click", function () { showLogin(""); });
+    $("clear-events").addEventListener("click", clearEvents);
 
     $("filters").addEventListener("submit", function (e) {
       e.preventDefault();

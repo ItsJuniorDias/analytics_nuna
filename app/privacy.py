@@ -87,8 +87,8 @@ class SecurityHeadersMiddleware:
                 if path == "/" or path.startswith("/dashboard"):
                     headers.append((b"content-security-policy", DASHBOARD_CSP.encode("ascii")))
                     headers.append((b"cache-control", b"no-store"))
-                elif path.startswith("/v1/stats"):
-                    # Estatísticas nunca em cache de navegador ou proxy.
+                elif path.startswith("/v1/stats") or path.startswith("/v1/admin"):
+                    # Estatísticas e ações de admin nunca em cache de navegador ou proxy.
                     headers.append((b"cache-control", b"no-store"))
                 message["headers"] = headers
             await send(message)
