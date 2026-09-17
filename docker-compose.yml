@@ -1,0 +1,24 @@
+# Uso local ou num servidor próprio:
+#   cp .env.example .env   # e preencha NUNA_APP_KEYS e NUNA_ADMIN_TOKEN
+#   docker compose up -d --build
+#   docker compose exec analytics python -m app.purge --days 180 --dry-run
+services:
+  analytics:
+    build: .
+    image: nuna-analytics
+    # O comando de execução (com --no-access-log e --no-proxy-headers) vem do
+    # Dockerfile; não sobrescreva aqui sem manter essas duas opções.
+    env_file: .env
+    environment:
+      NUNA_DB_PATH: /data/analytics.db
+      PORT: "8000"
+    ports:
+      # Só na interface local: exponha para a internet por um proxy com HTTPS
+      # e com o log de acesso sem IP.
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - nuna_analytics_data:/data
+    restart: unless-stopped
+
+volumes:
+  nuna_analytics_data:

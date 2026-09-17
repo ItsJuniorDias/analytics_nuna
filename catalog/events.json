@@ -1,0 +1,375 @@
+{
+  "version": 1,
+  "context": {
+    "event_id": {"type": "string", "required": true, "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},
+    "session_id": {"type": "string", "required": true, "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},
+    "timestamp": {"type": "string", "required": true, "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,3})?Z$"},
+    "app_version": {"type": "string", "required": true, "pattern": "^[0-9]{1,4}(\\.[0-9]{1,4}){0,2}$"},
+    "build": {"type": "string", "required": true, "pattern": "^[0-9]{1,8}(\\.[0-9]{1,4}){0,2}$"},
+    "os_version": {"type": "string", "required": true, "pattern": "^[0-9]{1,3}(\\.[0-9]{1,3}){0,2}$"},
+    "device_family": {"type": "string", "required": true, "enum": ["phone", "pad", "other"]},
+    "layout": {"type": "string", "required": false, "enum": ["single", "spread", "unknown"]},
+    "subscription_state": {"type": "string", "required": true, "enum": ["premium", "free", "unknown"]}
+  },
+  "events": {
+    "app_opened": {
+      "description": "First transition to the active scene phase in this process. Opens a session (new session_id).",
+      "properties": {
+        "onboarding_completed": {"type": "boolean", "required": true}
+      }
+    },
+    "app_foregrounded": {
+      "description": "App returned from background to active. Emitted after the 30-minute session rotation check, under the resulting session_id.",
+      "properties": {
+        "background_duration_bucket": {"type": "string", "required": true, "enum": ["lt_1m", "1_5m", "5_30m", "gte_30m"]},
+        "session_rotated": {"type": "boolean", "required": true}
+      }
+    },
+    "app_backgrounded": {
+      "description": "App moved to background. Triggers a queue flush.",
+      "properties": {
+        "foreground_duration_bucket": {"type": "string", "required": true, "enum": ["lt_1m", "1_5m", "5_15m", "15_30m", "30_60m", "gte_60m"]}
+      }
+    },
+    "catalog_loaded": {
+      "description": "Catalog and onboarding content finished loading at launch (once per process).",
+      "properties": {
+        "catalog_source": {"type": "string", "required": true, "enum": ["manifest", "bundle_fallback"]},
+        "books_total": {"type": "integer", "required": true, "minimum": 0, "maximum": 500},
+        "books_available": {"type": "integer", "required": true, "minimum": 0, "maximum": 500},
+        "missing_cover_count": {"type": "integer", "required": true, "minimum": 0, "maximum": 500},
+        "onboarding_content_loaded": {"type": "boolean", "required": true},
+        "load_duration_bucket": {"type": "string", "required": true, "enum": ["lt_50ms", "50_200ms", "200_1000ms", "gte_1s"]}
+      }
+    },
+    "store_products_loaded": {
+      "description": "Both subscription products (annual_nuna, monthly_nuna) were fetched. Denominator for the load failure rate.",
+      "properties": {
+        "fetch_context": {"type": "string", "required": true, "enum": ["launch", "paywall_open", "paywall_retry"]},
+        "duration_bucket": {"type": "string", "required": true, "enum": ["lt_1s", "1_3s", "3_10s", "gte_10s"]},
+        "trial_eligible": {"type": "boolean", "required": true}
+      }
+    },
+    "store_products_load_failed": {
+      "description": "Product fetch ended without both plans; the paywall cannot sell.",
+      "properties": {
+        "fetch_context": {"type": "string", "required": true, "enum": ["launch", "paywall_open", "paywall_retry"]},
+        "failure_kind": {"type": "string", "required": true, "enum": ["request_error", "incomplete_response"]},
+        "returned_count": {"type": "integer", "required": true, "minimum": 0, "maximum": 2},
+        "error_category": {"type": "string", "required": false, "enum": ["network", "not_available_in_storefront", "purchase_not_allowed", "unverified", "storekit_other", "purchase_error_other", "unknown"]}
+      }
+    },
+    "page_art_fallback_shown": {
+      "description": "A reader page is drawing the color-band placeholder because its illustration asset is missing. Once per asset per reader presentation.",
+      "properties": {
+        "book_id": {"type": "string", "required": true, "pattern": "^[a-z0-9-]{1,64}$"},
+        "spread_number": {"type": "integer", "required": true, "minimum": 1, "maximum": 200},
+        "asset_variant": {"type": "string", "required": true, "enum": ["spread", "left", "right"]}
+      }
+    },
+    "onboarding_started": {
+      "description": "Onboarding is shown (first run or 'Replay the intro').",
+      "properties": {
+        "trigger": {"type": "string", "required": true, "enum": ["first_run", "replay"]},
+        "page_count": {"type": "integer", "required": true, "minimum": 1, "maximum": 20},
+        "missing_image_count": {"type": "integer", "required": true, "minimum": 0, "maximum": 20}
+      }
+    },
+    "onboarding_page_viewed": {
+      "description": "The visible onboarding page changed.",
+      "properties": {
+        "page_index": {"type": "integer", "required": true, "minimum": 0, "maximum": 19},
+        "page_count": {"type": "integer", "required": true, "minimum": 1, "maximum": 20},
+        "direction": {"type": "string", "required": true, "enum": ["forward", "back"]},
+        "method": {"type": "string", "required": true, "enum": ["swipe", "next_button"]}
+      }
+    },
+    "onboarding_completed": {
+      "description": "The user tapped the last-page CTA ('Start reading').",
+      "properties": {
+        "trigger": {"type": "string", "required": true, "enum": ["first_run", "replay"]},
+        "page_count": {"type": "integer", "required": true, "minimum": 1, "maximum": 20},
+        "will_show_paywall": {"type": "boolean", "required": true},
+        "duration_bucket": {"type": "string", "required": true, "enum": ["lt_5s", "5_15s", "15_30s", "30_60s", "1_3m", "gte_3m"]}
+      }
+    },
+    "onboarding_skipped": {
+      "description": "The user tapped 'Skip' before the last page.",
+      "properties": {
+        "trigger": {"type": "string", "required": true, "enum": ["first_run", "replay"]},
+        "skipped_at_page_index": {"type": "integer", "required": true, "minimum": 0, "maximum": 19},
+        "page_count": {"type": "integer", "required": true, "minimum": 1, "maximum": 20},
+        "will_show_paywall": {"type": "boolean", "required": true},
+        "duration_bucket": {"type": "string", "required": true, "enum": ["lt_5s", "5_15s", "15_30s", "30_60s", "1_3m", "gte_3m"]}
+      }
+    },
+    "screen_viewed": {
+      "description": "A root tab became visible: first appearance of RootView (home) or a tab switch.",
+      "properties": {
+        "screen": {"type": "string", "required": true, "enum": ["home", "library", "parents"]},
+        "previous_screen": {"type": "string", "required": false, "enum": ["home", "library", "parents"]},
+        "trigger": {"type": "string", "required": true, "enum": ["initial", "tab_tap"]}
+      }
+    },
+    "home_section_viewed": {
+      "description": "A Home section became at least 50% visible. Deduplicated to once per section per session.",
+      "properties": {
+        "section": {"type": "string", "required": true, "enum": ["continue_strip", "week_card", "just_arrived", "collection", "all_books"]},
+        "collection_id": {"type": "string", "required": false, "enum": ["fora-de-casa", "quintal", "antes-de-dormir", "juntos"]},
+        "two_halves": {"type": "boolean", "required": true}
+      }
+    },
+    "library_search_performed": {
+      "description": "A Library search query settled (1 s without typing). The query text never leaves the device.",
+      "properties": {
+        "query_length_bucket": {"type": "string", "required": true, "enum": ["1_2", "3_5", "6_10", "gte_11"]},
+        "result_count": {"type": "integer", "required": true, "minimum": 0, "maximum": 500},
+        "filter": {"type": "string", "required": true, "enum": ["all", "available", "started"]},
+        "sort": {"type": "string", "required": true, "enum": ["catalog", "title"]}
+      }
+    },
+    "library_filter_changed": {
+      "description": "The Library filter chip changed.",
+      "properties": {
+        "filter": {"type": "string", "required": true, "enum": ["all", "available", "started"]},
+        "previous_filter": {"type": "string", "required": true, "enum": ["all", "available", "started"]},
+        "result_count": {"type": "integer", "required": true, "minimum": 0, "maximum": 500},
+        "sort": {"type": "string", "required": true, "enum": ["catalog", "title"]},
+        "has_query": {"type": "boolean", "required": true}
+      }
+    },
+    "library_sort_changed": {
+      "description": "The Library sort order changed.",
+      "properties": {
+        "sort": {"type": "string", "required": true, "enum": ["catalog", "title"]},
+        "previous_sort": {"type": "string", "required": true, "enum": ["catalog", "title"]},
+        "filter": {"type": "string", "required": true, "enum": ["all", "available", "started"]},
+        "has_query": {"type": "boolean", "required": true}
+      }
+    },
+    "book_opened": {
+      "description": "The reader is on screen and measured for a readable book (once per reader presentation). Also the reader screen view.",
+      "properties": {
+        "book_id": {"type": "string", "required": true, "pattern": "^[a-z0-9-]{1,64}$"},
+        "book_version": {"type": "integer", "required": true, "minimum": 0, "maximum": 10000},
+        "source": {"type": "string", "required": true, "enum": ["week_card", "continue_strip", "just_arrived", "collection", "all_books", "library_grid"]},
+        "collection_id": {"type": "string", "required": false, "enum": ["fora-de-casa", "quintal", "antes-de-dormir", "juntos"]},
+        "position": {"type": "integer", "required": false, "minimum": 0, "maximum": 499},
+        "library_filter": {"type": "string", "required": false, "enum": ["all", "available", "started"]},
+        "has_query": {"type": "boolean", "required": false},
+        "access_reason": {"type": "string", "required": true, "enum": ["premium", "free_book", "story_of_week"]},
+        "resume_state": {"type": "string", "required": true, "enum": ["start", "resumed", "resumed_at_end", "reset_invalid"]},
+        "start_spread": {"type": "integer", "required": true, "minimum": 1, "maximum": 200},
+        "spread_count": {"type": "integer", "required": true, "minimum": 1, "maximum": 200},
+        "orientation": {"type": "string", "required": true, "enum": ["portrait", "landscape"]},
+        "two_halves": {"type": "boolean", "required": true}
+      }
+    },
+    "page_turned": {
+      "description": "A page actually turned in the reader (tap zone, chevron or swipe).",
+      "properties": {
+        "book_id": {"type": "string", "required": true, "pattern": "^[a-z0-9-]{1,64}$"},
+        "direction": {"type": "string", "required": true, "enum": ["forward", "back"]},
+        "input": {"type": "string", "required": true, "enum": ["tap_zone", "button", "swipe"]},
+        "spread_number": {"type": "integer", "required": true, "minimum": 1, "maximum": 200},
+        "page_side": {"type": "string", "required": true, "enum": ["left", "right", "both"]},
+        "spread_count": {"type": "integer", "required": true, "minimum": 1, "maximum": 200},
+        "dwell_bucket": {"type": "string", "required": true, "enum": ["lt_2s", "2_5s", "5_15s", "15_60s", "gte_60s"]}
+      }
+    },
+    "book_completed": {
+      "description": "The last page became visible for the first time in this reader presentation.",
+      "properties": {
+        "book_id": {"type": "string", "required": true, "pattern": "^[a-z0-9-]{1,64}$"},
+        "source": {"type": "string", "required": true, "enum": ["week_card", "continue_strip", "just_arrived", "collection", "all_books", "library_grid"]},
+        "access_reason": {"type": "string", "required": true, "enum": ["premium", "free_book", "story_of_week"]},
+        "trigger": {"type": "string", "required": true, "enum": ["page_turn", "layout_change"]},
+        "read_from_start": {"type": "boolean", "required": true},
+        "pages_viewed": {"type": "integer", "required": true, "minimum": 0, "maximum": 400},
+        "back_turns": {"type": "integer", "required": true, "minimum": 0, "maximum": 99},
+        "spread_count": {"type": "integer", "required": true, "minimum": 1, "maximum": 200},
+        "duration_bucket": {"type": "string", "required": true, "enum": ["lt_10s", "10_30s", "30_60s", "1_2m", "2_5m", "5_10m", "10_20m", "gte_20m"]}
+      }
+    },
+    "reader_layout_changed": {
+      "description": "The reader switched between single page and two-page spread (fold/unfold, rotation, window resize), debounced 1 s.",
+      "properties": {
+        "book_id": {"type": "string", "required": true, "pattern": "^[a-z0-9-]{1,64}$"},
+        "from_layout": {"type": "string", "required": true, "enum": ["single", "spread"]},
+        "to_layout": {"type": "string", "required": true, "enum": ["single", "spread"]},
+        "orientation": {"type": "string", "required": true, "enum": ["portrait", "landscape"]},
+        "two_halves": {"type": "boolean", "required": true},
+        "spread_number": {"type": "integer", "required": true, "minimum": 1, "maximum": 200}
+      }
+    },
+    "reader_backgrounded": {
+      "description": "Snapshot of the reading session when the app goes to background with a book open (survives an app kill). reader_closed is authoritative when both exist.",
+      "properties": {
+        "book_id": {"type": "string", "required": true, "pattern": "^[a-z0-9-]{1,64}$"},
+        "source": {"type": "string", "required": true, "enum": ["week_card", "continue_strip", "just_arrived", "collection", "all_books", "library_grid"]},
+        "spread_number": {"type": "integer", "required": true, "minimum": 1, "maximum": 200},
+        "furthest_spread": {"type": "integer", "required": true, "minimum": 1, "maximum": 200},
+        "spread_count": {"type": "integer", "required": true, "minimum": 1, "maximum": 200},
+        "pages_viewed": {"type": "integer", "required": true, "minimum": 0, "maximum": 400},
+        "completed": {"type": "boolean", "required": true},
+        "duration_bucket": {"type": "string", "required": true, "enum": ["lt_10s", "10_30s", "30_60s", "1_2m", "2_5m", "5_10m", "10_20m", "gte_20m"]}
+      }
+    },
+    "reader_closed": {
+      "description": "The reader was closed with the X button. Self-contained summary of the reading session.",
+      "properties": {
+        "book_id": {"type": "string", "required": true, "pattern": "^[a-z0-9-]{1,64}$"},
+        "source": {"type": "string", "required": true, "enum": ["week_card", "continue_strip", "just_arrived", "collection", "all_books", "library_grid"]},
+        "access_reason": {"type": "string", "required": true, "enum": ["premium", "free_book", "story_of_week"]},
+        "start_spread": {"type": "integer", "required": true, "minimum": 1, "maximum": 200},
+        "end_spread": {"type": "integer", "required": true, "minimum": 1, "maximum": 200},
+        "furthest_spread": {"type": "integer", "required": true, "minimum": 1, "maximum": 200},
+        "spread_count": {"type": "integer", "required": true, "minimum": 1, "maximum": 200},
+        "pages_viewed": {"type": "integer", "required": true, "minimum": 0, "maximum": 400},
+        "forward_turns": {"type": "integer", "required": true, "minimum": 0, "maximum": 99},
+        "back_turns": {"type": "integer", "required": true, "minimum": 0, "maximum": 99},
+        "edge_nudges": {"type": "integer", "required": true, "minimum": 0, "maximum": 99},
+        "ignored_swipes": {"type": "integer", "required": true, "minimum": 0, "maximum": 99},
+        "layout_changes": {"type": "integer", "required": true, "minimum": 0, "maximum": 99},
+        "completed": {"type": "boolean", "required": true},
+        "duration_bucket": {"type": "string", "required": true, "enum": ["lt_10s", "10_30s", "30_60s", "1_2m", "2_5m", "5_10m", "10_20m", "gte_20m"]}
+      }
+    },
+    "paywall_viewed": {
+      "description": "The subscription paywall appeared (once per presentation).",
+      "properties": {
+        "source": {"type": "string", "required": true, "enum": ["post_onboarding", "home_header", "locked_book", "parents"]},
+        "book_id": {"type": "string", "required": false, "pattern": "^[a-z0-9-]{1,64}$"},
+        "book_source": {"type": "string", "required": false, "enum": ["week_card", "continue_strip", "just_arrived", "collection", "all_books", "library_grid"]},
+        "has_saved_progress": {"type": "boolean", "required": false},
+        "onboarding_trigger": {"type": "string", "required": false, "enum": ["first_run", "replay"]},
+        "products_ready": {"type": "boolean", "required": true},
+        "trial_eligible": {"type": "boolean", "required": true}
+      }
+    },
+    "plan_selected": {
+      "description": "The parent picked a different plan card.",
+      "properties": {
+        "plan": {"type": "string", "required": true, "enum": ["annual", "monthly"]},
+        "trial_eligible": {"type": "boolean", "required": true},
+        "source": {"type": "string", "required": true, "enum": ["post_onboarding", "home_header", "locked_book", "parents"]}
+      }
+    },
+    "subscribe_tapped": {
+      "description": "The parent tapped Subscribe / Start 7-day free trial; the parental gate opens.",
+      "properties": {
+        "plan": {"type": "string", "required": true, "enum": ["annual", "monthly"]},
+        "cta_variant": {"type": "string", "required": true, "enum": ["free_trial", "subscribe"]},
+        "source": {"type": "string", "required": true, "enum": ["post_onboarding", "home_header", "locked_book", "parents"]}
+      }
+    },
+    "parental_gate_shown": {
+      "description": "The 'Grown-ups only' multiplication gate appeared (once per presentation).",
+      "properties": {
+        "purpose": {"type": "string", "required": true, "enum": ["subscribe", "manage_subscription"]}
+      }
+    },
+    "parental_gate_passed": {
+      "description": "Correct answer; the gate closes and the purchase or Manage Subscriptions sheet follows.",
+      "properties": {
+        "purpose": {"type": "string", "required": true, "enum": ["subscribe", "manage_subscription"]},
+        "failed_attempts": {"type": "integer", "required": true, "minimum": 0, "maximum": 99},
+        "was_paused": {"type": "boolean", "required": true},
+        "duration_bucket": {"type": "string", "required": true, "enum": ["lt_5s", "5_15s", "15_30s", "30_60s", "1_3m", "gte_3m"]}
+      }
+    },
+    "parental_gate_failed": {
+      "description": "Wrong answer submitted; a new question appears. The third consecutive error pauses the keypad for 10 s.",
+      "properties": {
+        "purpose": {"type": "string", "required": true, "enum": ["subscribe", "manage_subscription"]},
+        "consecutive_errors": {"type": "integer", "required": true, "minimum": 1, "maximum": 3},
+        "caused_pause": {"type": "boolean", "required": true}
+      }
+    },
+    "parental_gate_cancelled": {
+      "description": "The gate was closed without a correct answer.",
+      "properties": {
+        "purpose": {"type": "string", "required": true, "enum": ["subscribe", "manage_subscription"]},
+        "failed_attempts": {"type": "integer", "required": true, "minimum": 0, "maximum": 99},
+        "while_paused": {"type": "boolean", "required": true},
+        "had_partial_answer": {"type": "boolean", "required": true}
+      }
+    },
+    "purchase_completed": {
+      "description": "StoreKit purchase verified and finished; premium unlocked.",
+      "properties": {
+        "plan": {"type": "string", "required": true, "enum": ["annual", "monthly"]},
+        "with_trial": {"type": "boolean", "required": true},
+        "source": {"type": "string", "required": true, "enum": ["post_onboarding", "home_header", "locked_book", "parents"]}
+      }
+    },
+    "purchase_pending": {
+      "description": "Purchase awaiting approval (Ask to Buy or bank confirmation).",
+      "properties": {
+        "plan": {"type": "string", "required": true, "enum": ["annual", "monthly"]},
+        "with_trial": {"type": "boolean", "required": true},
+        "source": {"type": "string", "required": true, "enum": ["post_onboarding", "home_header", "locked_book", "parents"]}
+      }
+    },
+    "purchase_cancelled": {
+      "description": "The parent dismissed the App Store purchase sheet (includes unknown StoreKit results mapped to cancel).",
+      "properties": {
+        "plan": {"type": "string", "required": true, "enum": ["annual", "monthly"]},
+        "with_trial": {"type": "boolean", "required": true},
+        "source": {"type": "string", "required": true, "enum": ["post_onboarding", "home_header", "locked_book", "parents"]}
+      }
+    },
+    "purchase_failed": {
+      "description": "The purchase threw an error ('Couldn't subscribe').",
+      "properties": {
+        "plan": {"type": "string", "required": true, "enum": ["annual", "monthly"]},
+        "with_trial": {"type": "boolean", "required": true},
+        "source": {"type": "string", "required": true, "enum": ["post_onboarding", "home_header", "locked_book", "parents"]},
+        "error_category": {"type": "string", "required": true, "enum": ["network", "not_available_in_storefront", "purchase_not_allowed", "unverified", "storekit_other", "purchase_error_other", "unknown"]}
+      }
+    },
+    "restore_tapped": {
+      "description": "Restore purchases was tapped (paywall footer or Parents).",
+      "properties": {
+        "screen": {"type": "string", "required": true, "enum": ["paywall", "parents"]},
+        "source": {"type": "string", "required": false, "enum": ["post_onboarding", "home_header", "locked_book", "parents"]}
+      }
+    },
+    "restore_finished": {
+      "description": "AppStore.sync finished.",
+      "properties": {
+        "screen": {"type": "string", "required": true, "enum": ["paywall", "parents"]},
+        "result": {"type": "string", "required": true, "enum": ["subscription_found", "no_subscription_found", "cancelled", "failed"]},
+        "error_category": {"type": "string", "required": false, "enum": ["network", "not_available_in_storefront", "purchase_not_allowed", "unverified", "storekit_other", "purchase_error_other", "unknown"]},
+        "source": {"type": "string", "required": false, "enum": ["post_onboarding", "home_header", "locked_book", "parents"]}
+      }
+    },
+    "paywall_closed": {
+      "description": "The paywall was dismissed (once per presentation).",
+      "properties": {
+        "source": {"type": "string", "required": true, "enum": ["post_onboarding", "home_header", "locked_book", "parents"]},
+        "reason": {"type": "string", "required": true, "enum": ["dismissed", "purchase_completed", "restored", "premium_activated_elsewhere"]},
+        "plans_ready": {"type": "boolean", "required": true},
+        "selected_plan": {"type": "string", "required": true, "enum": ["annual", "monthly"]},
+        "purchase_pending": {"type": "boolean", "required": true},
+        "duration_bucket": {"type": "string", "required": true, "enum": ["lt_5s", "5_15s", "15_30s", "30_60s", "1_3m", "gte_3m"]}
+      }
+    },
+    "subscription_status_changed": {
+      "description": "Premium entitlement changed after this launch's first resolution (the baseline itself is not an event; it only fills context.subscription_state).",
+      "properties": {
+        "new_state": {"type": "string", "required": true, "enum": ["premium", "free"]},
+        "trigger": {"type": "string", "required": true, "enum": ["launch", "transaction_update", "purchase", "restore", "foreground", "paywall_open"]},
+        "plan": {"type": "string", "required": false, "enum": ["annual", "monthly"]},
+        "is_family_shared": {"type": "boolean", "required": false},
+        "in_free_trial": {"type": "boolean", "required": false}
+      }
+    },
+    "reading_progress_reset": {
+      "description": "A parent confirmed 'Restart all books'; all saved reading positions were wiped.",
+      "properties": {
+        "books_in_progress_bucket": {"type": "string", "required": true, "enum": ["1", "2_5", "6_plus"]}
+      }
+    }
+  }
+}

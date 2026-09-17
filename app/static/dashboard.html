@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <title>Nuna Analytics</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/dashboard/dashboard.css">
+  <script src="/dashboard/dashboard.js" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap top-row">
+      <div>
+        <h1>Nuna Analytics</h1>
+        <p class="sub">Uso anônimo e agregado do app. Sem identificadores, só contagens.</p>
+      </div>
+      <button id="logout" class="button quiet" type="button" hidden>Sair</button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section id="login" class="login" hidden>
+      <h2>Entrar</h2>
+      <p class="muted">Cole o <code>NUNA_ADMIN_TOKEN</code>. Ele fica só nesta aba (sessionStorage) e some quando ela fecha.</p>
+      <form id="login-form" class="login-form" novalidate>
+        <label for="token">Token de admin</label>
+        <div class="row">
+          <input id="token" name="token" type="password" autocomplete="off" spellcheck="false" required>
+          <button class="button primary" type="submit">Entrar</button>
+        </div>
+      </form>
+      <p id="login-error" class="error" role="alert" hidden></p>
+    </section>
+
+    <div id="app" hidden>
+      <form id="filters" class="filters" novalidate>
+        <div class="field">
+          <label for="from">De (UTC)</label>
+          <input id="from" name="from" type="date" required>
+        </div>
+        <div class="field">
+          <label for="to">Até (UTC)</label>
+          <input id="to" name="to" type="date" required>
+        </div>
+        <div class="presets" role="group" aria-label="Períodos prontos">
+          <button class="button quiet" type="button" data-days="7">7 dias</button>
+          <button class="button quiet" type="button" data-days="30">30 dias</button>
+          <button class="button quiet" type="button" data-days="90">90 dias</button>
+        </div>
+        <button class="button primary" type="submit">Atualizar</button>
+      </form>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+
+      <section class="block" aria-labelledby="h-overview">
+        <h2 id="h-overview">Visão geral</h2>
+        <div id="overview-kpis" class="kpis"></div>
+        <div class="grid two">
+          <figure class="chart">
+            <figcaption>Eventos por dia</figcaption>
+            <div id="chart-events"></div>
+          </figure>
+          <figure class="chart">
+            <figcaption>Sessões por dia</figcaption>
+            <div id="chart-sessions"></div>
+          </figure>
+        </div>
+        <details class="table-view">
+          <summary>Ver tabela por dia</summary>
+          <div id="table-days" class="table-wrap"></div>
+        </details>
+        <h3>Eventos mais frequentes</h3>
+        <div id="table-top" class="table-wrap"></div>
+      </section>
+
+      <section class="block" aria-labelledby="h-funnel">
+        <h2 id="h-funnel">Funil</h2>
+        <p class="muted">Sessões que fizeram os passos nesta ordem. Filtro opcional por passo: <code>evento:propriedade=valor</code>.</p>
+        <form id="funnel-form" class="funnel-form" novalidate>
+          <div class="presets" role="group" aria-label="Funis prontos">
+            <button class="button quiet" type="button" data-steps="app_opened,onboarding_started:trigger=first_run,paywall_viewed:source=post_onboarding,screen_viewed:trigger=initial,book_opened,book_completed">Ativação</button>
+            <button class="button quiet" type="button" data-steps="book_opened,page_turned,book_completed,reader_closed">Leitura</button>
+            <button class="button quiet" type="button" data-steps="paywall_viewed,subscribe_tapped,parental_gate_shown:purpose=subscribe,parental_gate_passed:purpose=subscribe,purchase_completed">Monetização</button>
+            <button class="button quiet" type="button" data-steps="paywall_viewed:source=locked_book,subscribe_tapped,purchase_completed,book_opened">Livro bloqueado</button>
+          </div>
+          <label for="steps" class="visually-hidden">Passos do funil</label>
+          <div class="row">
+            <input id="steps" name="steps" type="text" spellcheck="false" autocomplete="off">
+            <button class="button primary" type="submit">Calcular</button>
+          </div>
+        </form>
+        <div id="funnel-result" class="table-wrap"></div>
+      </section>
+
+      <section class="block" aria-labelledby="h-books">
+        <h2 id="h-books">Livros</h2>
+        <div id="table-books" class="table-wrap"></div>
+      </section>
+
+      <section class="block" aria-labelledby="h-paywall">
+        <h2 id="h-paywall">Paywall e compras</h2>
+        <div id="paywall-kpis" class="kpis"></div>
+        <div class="grid two">
+          <div>
+            <h3>Visualizações por origem</h3>
+            <div id="table-views" class="table-wrap"></div>
+          </div>
+          <div>
+            <h3>Fechamentos por motivo</h3>
+            <div id="table-closes" class="table-wrap"></div>
+          </div>
+        </div>
+        <h3>Portão dos pais</h3>
+        <div id="table-gate" class="table-wrap"></div>
+        <div class="grid two">
+          <div>
+            <h3>Compras por plano e resultado</h3>
+            <div id="table-purchases" class="table-wrap"></div>
+          </div>
+          <div>
+            <h3>Restaurações por resultado</h3>
+            <div id="table-restores" class="table-wrap"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="block" aria-labelledby="h-explore">
+        <h2 id="h-explore">Explorar um evento</h2>
+        <form id="explore-form" class="filters" novalidate>
+          <div class="field">
+            <label for="explore-name">Evento</label>
+            <select id="explore-name" name="name"></select>
+          </div>
+          <div class="field">
+            <label for="explore-by">Quebrar por</label>
+            <select id="explore-by" name="by"></select>
+          </div>
+          <div class="field">
+            <label for="explore-group">Agrupar</label>
+            <select id="explore-group" name="group">
+              <option value="day">por dia</option>
+              <option value="total">no período</option>
+            </select>
+          </div>
+          <button class="button primary" type="submit">Ver</button>
+        </form>
+        <div id="explore-chart" class="chart"></div>
+        <div id="explore-table" class="table-wrap"></div>
+      </section>
+    </div>
+  </main>
+
+  <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
+</body>
+</html>

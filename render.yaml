@@ -1,0 +1,41 @@
+# Blueprint do Render: um Web Service Docker com disco persistente.
+#
+# SQLite precisa de disco persistente. Sem o bloco `disk`, o sistema de
+# arquivos do Render é efêmero e o banco some a cada deploy ou reinício.
+# Consequências de usar disco no Render:
+#   - só 1 instância (não dá para escalar horizontalmente);
+#   - sem zero-downtime deploy (alguns segundos fora do ar a cada deploy; o app
+#     guarda a fila e reenvia, então nada se perde);
+#   - exige plano pago (disco não existe no plano free).
+# O comando de execução vem do Dockerfile (uvicorn --no-access-log
+# --no-proxy-headers). A limpeza de retenção roda dentro do próprio serviço
+# (NUNA_PURGE_INTERVAL_HOURS), porque um Cron Job do Render não enxerga o disco
+# deste serviço.
+services:
+  - type: web
+    name: nuna-analytics
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter
+    region: oregon
+    numInstances: 1
+    healthCheckPath: /health
+    autoDeploy: false
+    disk:
+      name: nuna-analytics-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: NUNA_DB_PATH
+        value: /data/analytics.db
+      - key: NUNA_APP_KEYS
+        sync: false
+      - key: NUNA_ADMIN_TOKEN
+        generateValue: true
+      - key: NUNA_RETENTION_DAYS
+        value: "180"
+      - key: NUNA_MAX_BATCH
+        value: "100"
+      - key: NUNA_PURGE_INTERVAL_HOURS
+        value: "24"

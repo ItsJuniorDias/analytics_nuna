@@ -1,0 +1,8 @@
+# Runtime
+fastapi>=0.110,<1
+uvicorn[standard]>=0.29
+pydantic>=2.5,<3
+
+# Testes (TestClient do Starlette usa httpx)
+httpx>=0.27
+pytest>=8

@@ -1,0 +1,78 @@
+{
+  "context": {
+    "session_id": "5d2c8f7a-1b3e-4c6d-8e9f-0a1b2c3d4e5f",
+    "app_version": "1.0",
+    "build": "12",
+    "os_version": "27.0",
+    "device_family": "phone"
+  },
+  "events": [
+    {
+      "event_id": "0b6f4a8e-6f0e-4d5c-9a53-2f1c7a9d3e01",
+      "name": "app_opened",
+      "timestamp": "2026-09-17T19:02:11.482Z",
+      "properties": {
+        "onboarding_completed": true
+      },
+      "subscription_state": "unknown"
+    },
+    {
+      "event_id": "7c1e2d3f-4a5b-4c6d-9e7f-8a9b0c1d2e02",
+      "name": "catalog_loaded",
+      "timestamp": "2026-09-17T19:02:11.530Z",
+      "properties": {
+        "catalog_source": "manifest",
+        "books_total": 30,
+        "books_available": 24,
+        "missing_cover_count": 0,
+        "onboarding_content_loaded": true,
+        "load_duration_bucket": "lt_50ms"
+      },
+      "subscription_state": "unknown"
+    },
+    {
+      "event_id": "a3b4c5d6-e7f8-4a9b-8c0d-1e2f3a4b5c03",
+      "name": "screen_viewed",
+      "timestamp": "2026-09-17T19:02:12.004Z",
+      "properties": {
+        "screen": "home",
+        "trigger": "initial"
+      },
+      "subscription_state": "free"
+    },
+    {
+      "event_id": "c9d8e7f6-a5b4-4c3d-b2e1-f0a9b8c7d604",
+      "name": "book_opened",
+      "timestamp": "2026-09-17T19:02:20.117Z",
+      "properties": {
+        "book_id": "o-quintal-da-nuna",
+        "book_version": 3,
+        "source": "week_card",
+        "access_reason": "free_book",
+        "resume_state": "start",
+        "start_spread": 1,
+        "spread_count": 12,
+        "orientation": "portrait",
+        "two_halves": false
+      },
+      "layout": "single",
+      "subscription_state": "free"
+    },
+    {
+      "event_id": "1f2e3d4c-5b6a-4798-a1b2-c3d4e5f6a705",
+      "name": "page_turned",
+      "timestamp": "2026-09-17T19:02:31.902Z",
+      "properties": {
+        "book_id": "o-quintal-da-nuna",
+        "direction": "forward",
+        "input": "tap_zone",
+        "spread_number": 1,
+        "page_side": "right",
+        "spread_count": 12,
+        "dwell_bucket": "5_15s"
+      },
+      "layout": "single",
+      "subscription_state": "free"
+    }
+  ]
+}
