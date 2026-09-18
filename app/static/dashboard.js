@@ -68,6 +68,43 @@
     return flag(iso2) + " " + name;
   }
 
+  // Conversão: rótulos --------------------------------------------------------
+
+  var STEP_LABELS = {
+    viewed: "Viu o paywall",
+    subscribe_tapped: "Tocou em assinar",
+    gate_passed: "Passou pelo portão dos pais",
+    purchased: "Comprou"
+  };
+
+  var UNMEASURED = "Instalação anterior à medição";
+
+  // Valores dos enums do catálogo em português. O que não estiver aqui aparece
+  // como veio (versão do app, por exemplo).
+  var SEGMENT_LABELS = {
+    source: { post_onboarding: "Depois do onboarding", home_header: "Cabeçalho da Home", locked_book: "Livro bloqueado", parents: "Área dos pais" },
+    trial_eligible: { "true": "Elegível", "false": "Não elegível" },
+    install_age_bucket: { lt_1d: "Menos de 1 dia", "1_3d": "1 a 3 dias", "3_7d": "3 a 7 dias", "7_30d": "7 a 30 dias", "30_90d": "30 a 90 dias", gte_90d: "90 dias ou mais", unknown: UNMEASURED },
+    prior_paywall_views_bucket: { "0": "Primeira vez", "1": "1 antes", "2_4": "2 a 4 antes", "5_9": "5 a 9 antes", gte_10: "10 ou mais antes", unknown: UNMEASURED },
+    books_completed_bucket: { "0": "Nenhum", "1": "1", "2_4": "2 a 4", "5_9": "5 a 9", gte_10: "10 ou mais", unknown: UNMEASURED },
+    device_family: { phone: "iPhone", pad: "iPad", other: "Outro" }
+  };
+
+  function segmentText(by, value) {
+    if (value === null || value === undefined) {
+      // Faixa da jornada ausente: evento de uma versão do app sem a medição.
+      return /_bucket$/.test(by) ? "Versão do app sem a medição" : "(ausente)";
+    }
+    var labels = SEGMENT_LABELS[by];
+    var key = String(value);
+    return labels && labels[key] ? labels[key] : key;
+  }
+
+  /** "2026-09-18T14:03:22.123Z" -> "18 set 14:03" (UTC, como o resto do painel). */
+  function whenText(ts) {
+    return shortDay(ts.slice(0, 10)) + " " + ts.slice(11, 16);
+  }
+
   // DOM ---------------------------------------------------------------------
 
   function el(tag, attrs, children) {
@@ -393,19 +430,6 @@
 
   function loadPaywall() {
     return api("/v1/stats/paywall", range()).then(function (data) {
-      kpis($("paywall-kpis"), [
-        { label: "Visualizações", value: fmt(data.views_total) },
-        { label: "Toques em assinar", value: fmt(data.subscribe_taps_total) },
-        { label: "Compras concluídas", value: fmt(data.purchases_completed) },
-        { label: "Visualização → compra", value: pct(data.view_to_purchase_rate) }
-      ]);
-      table($("table-paywall-countries"), [
-        { key: "storefront", label: "País", kind: "country" },
-        { key: "views", label: "Visualizações", kind: "num" },
-        { key: "subscribe_taps", label: "Toques em assinar", kind: "num" },
-        { key: "purchases_completed", label: "Compras", kind: "num" },
-        { key: "view_to_purchase_rate", label: "Visualização → compra", kind: "pct" }
-      ], data.by_storefront, "purchases_completed");
       var valueCols = [{ key: "value", label: "Valor", kind: "code" }, { key: "count", label: "Total", kind: "num" }];
       table($("table-views"), valueCols, data.views_by_source, "count");
       table($("table-closes"), valueCols, data.closes_by_reason, "count");
@@ -424,6 +448,109 @@
         { key: "count", label: "Total", kind: "num" }
       ], data.purchases, "count");
     });
+  }
+
+  // Conversão do paywall --------------------------------------------------------
+
+  function loadConversion() {
+    var params = range();
+    params.by = $("segment-by").value;
+    return api("/v1/stats/paywall/conversion", params).then(function (data) {
+      var steps = data.steps;
+      var first = steps[0].sessions;
+      var bought = steps[steps.length - 1];
+      kpis($("conversion-kpis"), [
+        { label: "Sessões que viram o paywall", value: fmt(first) },
+        { label: "Tocaram em assinar", value: pct(steps[1].conversion_from_first) },
+        { label: "Compraram", value: fmt(bought.sessions) },
+        { label: "Conversão", value: pct(bought.conversion_from_first) }
+      ]);
+      table($("table-conversion-steps"), [
+        { key: "label", label: "Passo", kind: "text" },
+        { key: "sessions", label: "Sessões", kind: "num" },
+        { key: "conversion_from_previous", label: "Do passo anterior", kind: "pct" },
+        { key: "conversion_from_first", label: "Do início", kind: "pct" }
+      ], steps.map(function (s) { return Object.assign({ label: STEP_LABELS[s.key] || s.key }, s); }), "sessions", first);
+
+      var select = $("segment-by");
+      var isCountry = data.by === "storefront";
+      table($("table-segments"), [
+        { key: "label", label: select.options[select.selectedIndex].textContent, kind: isCountry ? "country" : "text" },
+        { key: "sessions", label: "Sessões", kind: "num" },
+        { key: "subscribe_tapped", label: "Tocaram em assinar", kind: "num" },
+        { key: "purchased", label: "Compraram", kind: "num" },
+        { key: "conversion", label: "Conversão", kind: "pct" }
+      ], data.segments.map(function (s) {
+        return Object.assign({ label: isCountry ? s.value : segmentText(data.by, s.value) }, s);
+      }), "conversion");
+    });
+  }
+
+  // Sessões ---------------------------------------------------------------------
+
+  var SESSION_LIMIT = 50;
+
+  function loadSessions() {
+    var params = range();
+    params.outcome = $("sessions-outcome").value;
+    params.limit = SESSION_LIMIT;
+    return api("/v1/stats/paywall/sessions", params).then(function (data) {
+      var container = clear($("table-sessions"));
+      if (!data.sessions.length) {
+        container.appendChild(el("p", { className: "empty", text: "Nenhuma sessão no período." }));
+        return;
+      }
+      var head = el("tr", null, ["Sessão", "Quando (UTC)", "País", "Origem", "Instalação", "Paywalls antes", "Chegou até"].map(function (label) {
+        return el("th", { scope: "col", text: label });
+      }));
+      // A API não manda id nenhum: a sessão é só a posição dela nesta lista.
+      var body = data.sessions.map(function (s, index) {
+        var number = index + 1;
+        var open = el("button", { className: "button quiet compact", type: "button", text: "#" + number, "aria-label": "Ver os eventos da sessão " + number });
+        open.addEventListener("click", function () { showTimeline(s, number); });
+        var furthest = STEP_LABELS[s.furthest_step] || s.furthest_step;
+        return el("tr", null, [
+          el("td", null, [open]),
+          el("td", { text: whenText(s.first_view_at) }),
+          el("td", { className: "country", text: countryText(s.storefront), title: s.storefront || "" }),
+          el("td", { text: segmentText("source", s.source) }),
+          el("td", { text: segmentText("install_age_bucket", s.install_age_bucket) }),
+          el("td", { text: segmentText("prior_paywall_views_bucket", s.prior_paywall_views_bucket) }),
+          el("td", { className: s.purchased ? "bought" : "", text: s.purchased ? "✓ " + furthest : furthest })
+        ]);
+      });
+      container.appendChild(el("table", null, [el("thead", null, [head]), el("tbody", null, body)]));
+      if (data.total > data.sessions.length) {
+        container.appendChild(el("p", { className: "muted", text: "As " + fmt(data.sessions.length) + " mais recentes de " + fmt(data.total) + "." }));
+      }
+    });
+  }
+
+  function propsText(props) {
+    var keys = Object.keys(props || {}).sort();
+    if (!keys.length) return "—";
+    return keys.map(function (key) { return key + "=" + props[key]; }).join(" · ");
+  }
+
+  function showTimeline(session, number) {
+    $("session-detail").hidden = false;
+    $("session-title").textContent = "Sessão #" + number;
+    var shown = session.events.length;
+    $("session-meta").textContent = [
+      countryText(session.storefront),
+      segmentText("device_family", session.device_family),
+      "versão " + session.app_version,
+      fmt(session.event_count) + " eventos" + (shown < session.event_count ? " (mostrando " + fmt(shown) + ")" : "")
+    ].join(" · ");
+    table($("table-timeline"), [
+      { key: "time", label: "Hora (UTC)", kind: "text" },
+      { key: "name", label: "Evento", kind: "code" },
+      { key: "details", label: "Propriedades", kind: "code" },
+      { key: "subscription_state", label: "Assinatura", kind: "code" }
+    ], session.events.map(function (e) {
+      return { time: e.ts.slice(11, 19), name: e.name, details: propsText(e.properties), subscription_state: e.subscription_state };
+    }));
+    $("session-title").focus();
   }
 
   function fillExploreSelectors() {
@@ -519,8 +646,12 @@
   function refreshAll() {
     var status = $("status");
     status.textContent = "Carregando…";
-    // Na ordem da página: paywall e compras primeiro, a seção mais importante.
+    // Outro período: a sessão aberta pode nem estar na lista nova.
+    $("session-detail").hidden = true;
+    // Na ordem da página: conversão do paywall primeiro, a seção mais importante.
     return Promise.all([
+      guarded(loadConversion(), $("table-segments")),
+      guarded(loadSessions(), $("table-sessions")),
       guarded(loadPaywall(), $("table-gate")),
       guarded(loadOverview(), $("table-top")),
       loadFunnel(),
@@ -597,6 +728,17 @@
     $("funnel-form").addEventListener("submit", function (e) {
       e.preventDefault();
       loadFunnel().catch(function () { showLogin("Token inválido ou sem acesso."); });
+    });
+
+    $("segment-by").addEventListener("change", function () {
+      guarded(loadConversion(), $("table-segments")).catch(function () { showLogin("Token inválido ou sem acesso."); });
+    });
+    $("sessions-outcome").addEventListener("change", function () {
+      $("session-detail").hidden = true;
+      guarded(loadSessions(), $("table-sessions")).catch(function () { showLogin("Token inválido ou sem acesso."); });
+    });
+    ["segment-form", "sessions-form"].forEach(function (id) {
+      $(id).addEventListener("submit", function (e) { e.preventDefault(); });
     });
 
     $("explore-name").addEventListener("change", fillBySelector);

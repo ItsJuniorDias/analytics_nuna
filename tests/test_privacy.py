@@ -199,17 +199,23 @@ def test_stats_never_return_session_ids(client, catalog):
     session = new_uuid()
     events = [
         make_event(catalog, name, session_id=session)
-        for name in ("app_opened", "book_opened", "book_completed")
+        for name in ("app_opened", "paywall_viewed", "book_opened", "book_completed")
     ]
     post_batch(client, events)
     session_ids = {session}
     event_ids = {e["event_id"] for e in events}
+    # A lista de sessões devolve linhas individuais, mas sem id: a checagem
+    # abaixo só prova alguma coisa se a sessão estiver mesmo na resposta.
+    listed = client.get("/v1/stats/paywall/sessions", headers=admin_headers()).json()
+    assert listed["total"] == 1 and listed["sessions"][0]["event_count"] == len(events)
     for path in (
         "/v1/stats/overview",
         "/v1/stats/events?name=book_opened&by=book_id",
         "/v1/stats/funnel?steps=app_opened,book_opened",
         "/v1/stats/books",
         "/v1/stats/paywall",
+        "/v1/stats/paywall/conversion?by=source",
+        "/v1/stats/paywall/sessions",
     ):
         text = client.get(path, headers=admin_headers()).text
         for value in session_ids | event_ids:

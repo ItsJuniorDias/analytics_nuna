@@ -1,10 +1,13 @@
-/* Paleta do Nuna: papel, tinta, marrom secundário e um único acento. Sem sombras. */
+/* Paleta do Nuna: papel, tinta, marrom secundário e um único acento. Sem sombras.
+   Mesmos tokens do app (UITokens em Nuna/DesignSystem/Palette.swift): o acento
+   é o magenta; o tijolo fica só para erro e ação destrutiva. */
 :root {
   --bg: #F7F3E9;
   --text: #1C1815;
   --muted: #6B5F52;
-  --accent: #C03A32;
+  --accent: #C4407A;
   --on-accent: #F7F3E9;
+  --erro: #C03A32;
   --line: rgba(28, 24, 21, 0.16);
   --line-soft: rgba(28, 24, 21, 0.08);
   --field: rgba(255, 255, 255, 0.55);
@@ -136,10 +139,12 @@ input:focus-visible, select:focus-visible, button:focus-visible, summary:focus-v
 }
 
 .button.quiet:hover { border-color: var(--muted); }
-/* Ação destrutiva: contorno no acento, sem o fundo cheio do botão primário. */
-.button.danger { background: transparent; color: var(--accent); border-color: var(--accent); }
-.button.danger:hover { background: var(--accent); color: #F7F3E9; }
+/* Ação destrutiva: contorno no tijolo, sem o fundo cheio do botão primário. */
+.button.danger { background: transparent; color: var(--erro); border-color: var(--erro); }
+.button.danger:hover { background: var(--erro); color: #F7F3E9; }
 .button:disabled { opacity: 0.5; cursor: default; }
+/* Dentro de tabela: o id curto da sessão, sem esticar a linha. */
+.button.compact { min-height: 32px; padding: 4px 10px; font-family: var(--mono); font-size: 13px; }
 .top-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .button.primary:hover { filter: brightness(0.94); }
 
@@ -163,7 +168,7 @@ input:focus-visible, select:focus-visible, button:focus-visible, summary:focus-v
 .login-form { margin-top: 20px; }
 
 .status { min-height: 1.5em; color: var(--muted); margin: 0; font-size: 13px; }
-.error { color: var(--accent); }
+.error { color: var(--erro); }
 
 .visually-hidden {
   position: absolute !important;
@@ -271,6 +276,8 @@ td.num, th.num {
 
 td.code { font-family: var(--mono); font-size: 13px; word-break: break-word; }
 td.country { white-space: nowrap; }
+td.bought { font-weight: 600; }
+#session-title:focus { outline: none; }
 
 td.barcell { width: 32%; min-width: 96px; padding-right: 0; }
 td.barcell svg { display: block; width: 100%; height: 10px; }

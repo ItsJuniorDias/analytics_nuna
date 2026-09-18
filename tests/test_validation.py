@@ -218,9 +218,9 @@ def test_first_error_wins_and_is_deterministic(catalog):
 # Integridade do próprio catálogo -------------------------------------------
 
 
-def test_catalog_file_is_version_1_with_38_events(catalog):
+def test_catalog_file_is_version_1_with_39_events(catalog):
     assert catalog.version == 1
-    assert len(catalog.events) == 38
+    assert len(catalog.events) == 39
     assert list(catalog.context) == [
         "event_id",
         "session_id",

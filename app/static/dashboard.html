@@ -15,7 +15,7 @@
     <div class="wrap top-row">
       <div>
         <h1>Nuna Analytics</h1>
-        <p class="sub">Uso anônimo e agregado do app. Sem identificadores, só contagens.</p>
+        <p class="sub">Uso anônimo do app, com foco na conversão do paywall. Sem identificadores.</p>
       </div>
       <div class="top-actions">
         <button id="clear-events" class="button danger" type="button" hidden>Limpar eventos</button>
@@ -57,11 +57,56 @@
       </form>
       <p id="status" class="status" role="status" aria-live="polite"></p>
 
+      <section class="block" aria-labelledby="h-conversion">
+        <h2 id="h-conversion">Conversão do paywall</h2>
+        <p class="muted">Contado por sessão: cada lançamento do app entra uma vez, pela primeira vez que viu o paywall no período, e os passos seguintes precisam acontecer depois, no mesmo lançamento.</p>
+        <div id="conversion-kpis" class="kpis"></div>
+        <h3>Funil de compra</h3>
+        <div id="table-conversion-steps" class="table-wrap"></div>
+
+        <h3>Conversão por segmento</h3>
+        <form id="segment-form" class="filters" novalidate>
+          <div class="field">
+            <label for="segment-by">Quebrar por</label>
+            <select id="segment-by" name="by">
+              <option value="storefront">País da loja</option>
+              <option value="source">Origem do paywall</option>
+              <option value="trial_eligible">Elegível ao teste grátis</option>
+              <option value="install_age_bucket">Idade da instalação</option>
+              <option value="prior_paywall_views_bucket">Paywalls vistos antes</option>
+              <option value="books_completed_bucket">Livros concluídos antes</option>
+              <option value="device_family">Aparelho</option>
+              <option value="app_version">Versão do app</option>
+            </select>
+          </div>
+        </form>
+        <div id="table-segments" class="table-wrap"></div>
+      </section>
+
+      <section class="block" aria-labelledby="h-sessions">
+        <h2 id="h-sessions">Sessões no paywall</h2>
+        <p class="muted">Cada linha é um lançamento anônimo do app, não uma pessoa: o id da sessão nasce aleatório a cada abertura, então duas linhas podem ser da mesma família sem que dê para saber.</p>
+        <form id="sessions-form" class="filters" novalidate>
+          <div class="field">
+            <label for="sessions-outcome">Mostrar</label>
+            <select id="sessions-outcome" name="outcome">
+              <option value="all">todas</option>
+              <option value="purchased">só as que compraram</option>
+              <option value="not_purchased">só as que não compraram</option>
+            </select>
+          </div>
+        </form>
+        <div id="table-sessions" class="table-wrap"></div>
+        <div id="session-detail" hidden>
+          <h3 id="session-title" tabindex="-1">Sessão</h3>
+          <p id="session-meta" class="muted"></p>
+          <div id="table-timeline" class="table-wrap"></div>
+        </div>
+      </section>
+
       <section class="block" aria-labelledby="h-paywall">
-        <h2 id="h-paywall">Paywall e compras</h2>
-        <div id="paywall-kpis" class="kpis"></div>
-        <h3>Por país</h3>
-        <div id="table-paywall-countries" class="table-wrap"></div>
+        <h2 id="h-paywall">Paywall em detalhe</h2>
+        <p class="muted">Contagens de eventos, não de sessões.</p>
         <div class="grid two">
           <div>
             <h3>Visualizações por origem</h3>

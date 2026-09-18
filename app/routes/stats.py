@@ -1,4 +1,8 @@
-"""Rotas /v1/stats: só agregados, sempre com Authorization: Bearer <NUNA_ADMIN_TOKEN>."""
+"""Rotas /v1/stats, sempre com Authorization: Bearer <NUNA_ADMIN_TOKEN>.
+
+Nenhuma devolve session_id ou event_id. Todas são agregados, menos
+/paywall/sessions: lançamentos anônimos do app, sem id, até 50 por vez.
+"""
 
 from typing import Any, Callable, Optional
 
@@ -13,7 +17,9 @@ from ..schemas import (
     EventCountsResponse,
     FunnelResponse,
     OverviewResponse,
+    PaywallConversionResponse,
     PaywallResponse,
+    PaywallSessionsResponse,
 )
 
 router = APIRouter(prefix="/v1/stats", tags=["stats"], dependencies=[Depends(require_admin)])
@@ -82,3 +88,44 @@ def books(request: Request, raw_from: Optional[str] = FROM_QUERY, to: Optional[s
 def paywall(request: Request, raw_from: Optional[str] = FROM_QUERY, to: Optional[str] = TO_QUERY) -> Any:
     catalog = _catalog(request)
     return _run(request, raw_from, to, lambda conn, rng: stats.paywall(conn, catalog, rng))
+
+
+@router.get(
+    "/paywall/conversion",
+    response_model=PaywallConversionResponse,
+    summary="Funil de compra por sessão, no total e por segmento",
+)
+def paywall_conversion(
+    request: Request,
+    by: Optional[str] = Query(
+        None,
+        description="Segmento da primeira visualização: storefront, source, trial_eligible,"
+        " install_age_bucket, prior_paywall_views_bucket, books_completed_bucket,"
+        " device_family ou app_version.",
+    ),
+    raw_from: Optional[str] = FROM_QUERY,
+    to: Optional[str] = TO_QUERY,
+) -> Any:
+    catalog = _catalog(request)
+    return _run(request, raw_from, to, lambda conn, rng: stats.paywall_conversion(conn, catalog, rng, by))
+
+
+@router.get(
+    "/paywall/sessions",
+    response_model=PaywallSessionsResponse,
+    summary="Sessões anônimas que viram o paywall, com os próprios eventos, mais recentes primeiro",
+)
+def paywall_sessions(
+    request: Request,
+    outcome: Optional[str] = Query(None, description="all (padrão), purchased ou not_purchased."),
+    limit: Optional[int] = Query(None, description="1 a 50 (padrão: 50)."),
+    raw_from: Optional[str] = FROM_QUERY,
+    to: Optional[str] = TO_QUERY,
+) -> Any:
+    catalog = _catalog(request)
+    return _run(
+        request,
+        raw_from,
+        to,
+        lambda conn, rng: stats.paywall_session_list(conn, catalog, rng, outcome, limit),
+    )

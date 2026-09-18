@@ -233,6 +233,7 @@ def test_paywall(seeded):
     assert data["gate"] == [
         {"purpose": "subscribe", "shown": 2, "passed": 1, "failed": 1, "cancelled": 1, "pass_rate": 0.5},
         {"purpose": "manage_subscription", "shown": 0, "passed": 0, "failed": 0, "cancelled": 0, "pass_rate": None},
+        {"purpose": "external_link", "shown": 0, "passed": 0, "failed": 0, "cancelled": 0, "pass_rate": None},
     ]
     assert data["purchases"] == [
         {"plan": "annual", "result": "completed", "count": 1},
@@ -245,6 +246,95 @@ def test_paywall(seeded):
     assert data["restores_by_result"] == []
 
 
+# Conversão do paywall ---------------------------------------------------------
+
+
+def test_paywall_conversion_funnel(seeded):
+    data = get(seeded, "/v1/stats/paywall/conversion")
+    # S1 compra; S4 toca em assinar no mesmo milissegundo do paywall (o empate
+    # segue a ordem do funil); S3 tocou ANTES de ver, então não conta; S2 só viu.
+    assert data["by"] is None and data["segments"] == []
+    assert data["steps"] == [
+        {"key": "viewed", "name": "paywall_viewed", "sessions": 4,
+         "conversion_from_previous": None, "conversion_from_first": 1.0},
+        {"key": "subscribe_tapped", "name": "subscribe_tapped", "sessions": 2,
+         "conversion_from_previous": 0.5, "conversion_from_first": 0.5},
+        {"key": "gate_passed", "name": "parental_gate_passed", "sessions": 1,
+         "conversion_from_previous": 0.5, "conversion_from_first": 0.25},
+        {"key": "purchased", "name": "purchase_completed", "sessions": 1,
+         "conversion_from_previous": 1.0, "conversion_from_first": 0.25},
+    ]
+
+
+def test_paywall_conversion_by_source_follows_catalog_order(seeded):
+    data = get(seeded, "/v1/stats/paywall/conversion", by="source")
+    assert data["segments"] == [
+        {"value": "post_onboarding", "sessions": 1, "subscribe_tapped": 1, "gate_passed": 1, "purchased": 1, "conversion": 1.0},
+        {"value": "home_header", "sessions": 1, "subscribe_tapped": 0, "gate_passed": 0, "purchased": 0, "conversion": 0.0},
+        {"value": "locked_book", "sessions": 2, "subscribe_tapped": 1, "gate_passed": 0, "purchased": 0, "conversion": 0.0},
+    ]
+
+
+def test_paywall_conversion_by_context_column(seeded):
+    data = get(seeded, "/v1/stats/paywall/conversion", by="device_family")
+    assert data["segments"] == [
+        {"value": "phone", "sessions": 3, "subscribe_tapped": 2, "gate_passed": 1, "purchased": 1, "conversion": 0.3333},
+        {"value": "pad", "sessions": 1, "subscribe_tapped": 0, "gate_passed": 0, "purchased": 0, "conversion": 0.0},
+    ]
+
+
+def test_paywall_conversion_without_journey_buckets(seeded):
+    # App anterior à medição da jornada: as faixas não vêm e o segmento é null.
+    data = get(seeded, "/v1/stats/paywall/conversion", by="install_age_bucket")
+    assert data["segments"] == [
+        {"value": None, "sessions": 4, "subscribe_tapped": 2, "gate_passed": 1, "purchased": 1, "conversion": 0.25},
+    ]
+
+
+def test_paywall_conversion_by_journey_bucket(make_client, catalog):
+    client = make_client(max_event_age_days=36500)
+    new, veteran = new_uuid(), new_uuid()
+    events = [
+        ev(catalog, "paywall_viewed", new, "2026-03-01T10:00:00.000Z",
+           install_age_bucket="lt_1d", prior_paywall_views_bucket="0", books_completed_bucket="0"),
+        ev(catalog, "subscribe_tapped", new, "2026-03-01T10:01:00.000Z", plan="annual"),
+        ev(catalog, "parental_gate_passed", new, "2026-03-01T10:01:30.000Z", purpose="subscribe"),
+        ev(catalog, "purchase_completed", new, "2026-03-01T10:02:00.000Z", plan="annual"),
+        ev(catalog, "paywall_viewed", veteran, "2026-03-02T10:00:00.000Z",
+           install_age_bucket="unknown", prior_paywall_views_bucket="unknown", books_completed_bucket="unknown"),
+    ]
+    assert post_batch(client, events).json()["accepted"] == len(events)
+    data = get(client, "/v1/stats/paywall/conversion", by="install_age_bucket")
+    # Ordem do catálogo: lt_1d antes de unknown.
+    assert [(s["value"], s["purchased"]) for s in data["segments"]] == [("lt_1d", 1), ("unknown", 0)]
+
+
+def test_paywall_sessions_embed_events_without_ids(seeded):
+    data = get(seeded, "/v1/stats/paywall/sessions")
+    assert data["outcome"] == "all" and data["total"] == 4
+    # Mais recente primeiro, pela primeira visualização do paywall.
+    assert [(s["source"], s["furthest_step"]) for s in data["sessions"]] == [
+        ("locked_book", "subscribe_tapped"),
+        ("locked_book", "viewed"),
+        ("home_header", "viewed"),
+        ("post_onboarding", "purchased"),
+    ]
+    bought = data["sessions"][-1]
+    assert bought["purchased"] is True and bought["first_view_at"] == "2026-03-01T10:01:00.000Z"
+    assert bought["event_count"] == 9
+    assert [e["name"] for e in bought["events"]][:3] == ["app_opened", "onboarding_started", "paywall_viewed"]
+    for row in data["sessions"]:
+        assert "session_id" not in row
+        assert all(set(e) == {"name", "ts", "subscription_state", "properties"} for e in row["events"])
+
+
+def test_paywall_sessions_filter_by_outcome(seeded):
+    purchased = get(seeded, "/v1/stats/paywall/sessions", outcome="purchased")
+    assert purchased["total"] == 1 and purchased["sessions"][0]["source"] == "post_onboarding"
+    not_purchased = get(seeded, "/v1/stats/paywall/sessions", outcome="not_purchased", limit=2)
+    assert not_purchased["total"] == 3 and len(not_purchased["sessions"]) == 2
+
+
 def test_empty_database_returns_zeros(client):
     headers = admin_headers()
     assert client.get("/v1/stats/books", headers=headers).json()["books"] == []
@@ -253,6 +343,11 @@ def test_empty_database_returns_zeros(client):
     funnel = client.get("/v1/stats/funnel?steps=app_opened,book_opened", headers=headers).json()
     assert [s["sessions"] for s in funnel["steps"]] == [0, 0]
     assert funnel["steps"][1]["conversion_from_previous"] is None
+    conversion = client.get("/v1/stats/paywall/conversion?by=storefront", headers=headers).json()
+    assert [s["sessions"] for s in conversion["steps"]] == [0, 0, 0, 0]
+    assert conversion["steps"][3]["conversion_from_first"] is None and conversion["segments"] == []
+    sessions = client.get("/v1/stats/paywall/sessions", headers=headers).json()
+    assert sessions["total"] == 0 and sessions["sessions"] == []
 
 
 # Parâmetros inválidos ------------------------------------------------------------
@@ -283,6 +378,12 @@ def test_empty_database_returns_zeros(client):
         "/v1/stats/funnel?steps=parental_gate_passed:failed_attempts=100,purchase_completed",
         "/v1/stats/funnel?steps=parental_gate_passed:was_paused=1,purchase_completed",
         "/v1/stats/funnel?steps=app_opened' OR 1=1 --,book_opened",
+        "/v1/stats/paywall/conversion?by=session_id",
+        "/v1/stats/paywall/conversion?by=properties",
+        "/v1/stats/paywall/conversion?by=storefront; DROP TABLE events",
+        "/v1/stats/paywall/sessions?outcome=everyone",
+        "/v1/stats/paywall/sessions?limit=0",
+        "/v1/stats/paywall/sessions?limit=51",
     ],
 )
 def test_invalid_parameters_are_422(client, path):

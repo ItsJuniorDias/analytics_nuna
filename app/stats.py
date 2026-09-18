@@ -5,7 +5,9 @@ SQL montados em Python são fragmentos constantes escolhidos por opções já
 validadas (agrupar por dia ou não, coluna de contexto de uma lista fixa) e a
 quantidade de placeholders de um IN.
 
-Nenhuma rota devolve session_id ou linha de evento individual: só contagens.
+Nenhuma rota devolve session_id ou event_id. Todas são contagens, menos
+`paywall_session_list`: lançamentos anônimos que viram o paywall, com os
+próprios eventos, sem id nenhum e até 50 por vez.
 """
 
 import itertools
@@ -474,3 +476,231 @@ def _paywall_by_storefront(conn: sqlite3.Connection, rng: DateRange) -> List[Dic
         }
         for r in rows
     ]
+
+
+# Conversão do paywall --------------------------------------------------------
+
+# O caminho de uma compra, na ordem. `plan_selected` fica de fora: é opcional
+# (o plano pré-selecionado basta) e cortaria quem assina sem trocar de cartão.
+# O portão dos pais entra filtrado: o mesmo evento também aparece para
+# gerenciar assinatura e para abrir link externo.
+PAYWALL_STEPS: Tuple[Tuple[str, str], ...] = (
+    ("viewed", "paywall_viewed"),
+    ("subscribe_tapped", "subscribe_tapped"),
+    ("gate_passed", "parental_gate_passed:purpose=subscribe"),
+    ("purchased", "purchase_completed"),
+)
+
+# Por onde quebrar a conversão. Tudo vem da PRIMEIRA `paywall_viewed` da
+# sessão: as propriedades dela (origem, trial, faixas da jornada) ou o
+# contexto gravado junto (país da loja, aparelho, versão).
+CONVERSION_SEGMENTS: Dict[str, Tuple[str, str]] = {
+    "storefront": ("context", "storefront"),
+    "source": ("property", "source"),
+    "trial_eligible": ("property", "trial_eligible"),
+    "install_age_bucket": ("property", "install_age_bucket"),
+    "prior_paywall_views_bucket": ("property", "prior_paywall_views_bucket"),
+    "books_completed_bucket": ("property", "books_completed_bucket"),
+    "device_family": ("context", "device_family"),
+    "app_version": ("context", "app_version"),
+}
+
+SESSION_OUTCOMES = ("all", "purchased", "not_purchased")
+DEFAULT_SESSION_LIMIT = 50
+MAX_SESSION_LIMIT = 50
+MAX_EVENTS_PER_SESSION = 300
+
+
+@dataclass
+class _PaywallSession:
+    session_id: str
+    reached: int  # passos de PAYWALL_STEPS cumpridos em ordem, 1 a 4
+    view: sqlite3.Row  # a primeira paywall_viewed da sessão no período
+    view_properties: Dict[str, Any]
+
+
+def _paywall_sessions(conn: sqlite3.Connection, catalog: Catalog, rng: DateRange) -> List[_PaywallSession]:
+    """Cada sessão que viu o paywall no período, com até onde chegou.
+
+    Mesma regra do funil genérico: passos em ordem, dentro da sessão. Compra
+    feita em outro lançamento do app não é ligada a esta visualização, e esse
+    é o preço de não ter identificador persistente.
+    """
+    steps = parse_funnel_steps(catalog, ",".join(raw for _, raw in PAYWALL_STEPS))
+    names = sorted({s.name for s in steps})
+    rank: Dict[str, int] = {}
+    for index, step in enumerate(steps):
+        rank.setdefault(step.name, index)
+
+    cursor = conn.execute(
+        "SELECT session_id, name, ts, properties, storefront, device_family, app_version FROM events"
+        " WHERE name IN (%s) AND ts >= ? AND ts < ?"
+        " ORDER BY session_id, ts" % _placeholders(len(names)),
+        tuple(names) + rng.bounds,
+    )
+    sessions: List[_PaywallSession] = []
+    for session_id, rows in itertools.groupby(cursor, key=lambda r: r["session_id"]):
+        ordered = sorted(rows, key=lambda r: (r["ts"], rank[r["name"]]))
+        k = 0
+        view: Optional[sqlite3.Row] = None
+        view_properties: Dict[str, Any] = {}
+        for row in ordered:
+            props = json.loads(row["properties"])
+            if steps[k].matches(row["name"], props):
+                if k == 0:
+                    view, view_properties = row, props
+                k += 1
+                if k == len(steps):
+                    break
+        if view is not None:
+            sessions.append(_PaywallSession(session_id, k, view, view_properties))
+    return sessions
+
+
+def _segment_value(session: _PaywallSession, by: str) -> Any:
+    kind, key = CONVERSION_SEGMENTS[by]
+    if kind == "context":
+        return session.view[key]
+    return session.view_properties.get(key)
+
+
+def _reached_counts(reached: Sequence[int]) -> List[int]:
+    return [sum(1 for r in reached if r > i) for i in range(len(PAYWALL_STEPS))]
+
+
+def paywall_conversion(
+    conn: sqlite3.Connection, catalog: Catalog, rng: DateRange, by: Optional[str]
+) -> Dict[str, Any]:
+    """Funil de compra por sessão (visualização → assinar → portão → compra),
+    no total e, com `by`, quebrado por um segmento da primeira visualização."""
+    if by is not None and by not in CONVERSION_SEGMENTS:
+        raise StatsQueryError("invalid_by: use one of %s" % ", ".join(sorted(CONVERSION_SEGMENTS)))
+
+    sessions = _paywall_sessions(conn, catalog, rng)
+    counts = _reached_counts([s.reached for s in sessions])
+    steps = [
+        {
+            "key": key,
+            "name": raw.split(":")[0],
+            "sessions": counts[index],
+            "conversion_from_previous": None if index == 0 else _rate(counts[index], counts[index - 1]),
+            "conversion_from_first": _rate(counts[index], counts[0]),
+        }
+        for index, (key, raw) in enumerate(PAYWALL_STEPS)
+    ]
+
+    segments: List[Dict[str, Any]] = []
+    if by is not None:
+        groups: Dict[Any, List[int]] = {}
+        for session in sessions:
+            groups.setdefault(_segment_value(session, by), []).append(session.reached)
+        for value, reached in groups.items():
+            c = _reached_counts(reached)
+            segments.append(
+                {
+                    "value": value,
+                    "sessions": c[0],
+                    "subscribe_tapped": c[1],
+                    "gate_passed": c[2],
+                    "purchased": c[3],
+                    "conversion": _rate(c[3], c[0]),
+                }
+            )
+        # Faixas na ordem do catálogo (lt_1d, 1_3d…), o resto do maior para o
+        # menor. Sem valor (app antigo, loja não informada) sempre no fim.
+        kind, key = CONVERSION_SEGMENTS[by]
+        spec = catalog.property_spec("paywall_viewed", key) if kind == "property" else None
+        order = list(spec.enum) if spec is not None and spec.enum else None
+
+        def sort_key(row: Dict[str, Any]) -> Tuple[Any, ...]:
+            value = row["value"]
+            if order is not None:
+                return (value not in order, order.index(value) if value in order else 0)
+            return (value is None, -row["sessions"], str(value))
+
+        segments.sort(key=sort_key)
+
+    return {
+        "from": rng.start.isoformat(),
+        "to": rng.end.isoformat(),
+        "by": by,
+        "steps": steps,
+        "segments": segments,
+    }
+
+
+def paywall_session_list(
+    conn: sqlite3.Connection,
+    catalog: Catalog,
+    rng: DateRange,
+    outcome: Optional[str],
+    limit: Optional[int],
+) -> Dict[str, Any]:
+    """Sessões que viram o paywall, da mais recente para a mais antiga, cada
+    uma com os próprios eventos em ordem.
+
+    É a única rota que devolve linhas individuais, e sem nenhum id: nem
+    session_id nem event_id saem daqui. Cada linha é um lançamento anônimo do
+    app, não uma pessoa, e até 50 por vez.
+    """
+    outcome = outcome or "all"
+    if outcome not in SESSION_OUTCOMES:
+        raise StatsQueryError("invalid_outcome: use %s" % ", ".join(SESSION_OUTCOMES))
+    limit = DEFAULT_SESSION_LIMIT if limit is None else limit
+    if limit < 1 or limit > MAX_SESSION_LIMIT:
+        raise StatsQueryError("invalid_limit: use 1 to %d" % MAX_SESSION_LIMIT)
+
+    last = len(PAYWALL_STEPS)
+    sessions = _paywall_sessions(conn, catalog, rng)
+    if outcome == "purchased":
+        sessions = [s for s in sessions if s.reached == last]
+    elif outcome == "not_purchased":
+        sessions = [s for s in sessions if s.reached < last]
+    sessions.sort(key=lambda s: s.view["ts"], reverse=True)
+    shown = sessions[:limit]
+
+    timelines: Dict[str, List[Dict[str, Any]]] = {s.session_id: [] for s in shown}
+    if shown:
+        cursor = conn.execute(
+            "SELECT session_id, name, ts, subscription_state, properties FROM events"
+            " WHERE session_id IN (%s) ORDER BY session_id, ts" % _placeholders(len(shown)),
+            tuple(timelines),
+        )
+        for r in cursor:
+            timelines[r["session_id"]].append(
+                {
+                    "name": r["name"],
+                    "ts": r["ts"],
+                    "subscription_state": r["subscription_state"],
+                    "properties": json.loads(r["properties"]),
+                }
+            )
+
+    rows = []
+    for s in shown:
+        props = s.view_properties
+        events = timelines[s.session_id]
+        rows.append(
+            {
+                "first_view_at": s.view["ts"],
+                "storefront": s.view["storefront"],
+                "device_family": s.view["device_family"],
+                "app_version": s.view["app_version"],
+                "source": props.get("source"),
+                "trial_eligible": props.get("trial_eligible"),
+                "install_age_bucket": props.get("install_age_bucket"),
+                "prior_paywall_views_bucket": props.get("prior_paywall_views_bucket"),
+                "books_completed_bucket": props.get("books_completed_bucket"),
+                "furthest_step": PAYWALL_STEPS[s.reached - 1][0],
+                "purchased": s.reached == last,
+                "event_count": len(events),
+                "events": events[:MAX_EVENTS_PER_SESSION],
+            }
+        )
+    return {
+        "from": rng.start.isoformat(),
+        "to": rng.end.isoformat(),
+        "outcome": outcome,
+        "total": len(sessions),
+        "sessions": rows,
+    }

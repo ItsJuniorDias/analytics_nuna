@@ -40,6 +40,8 @@ Fonte da verdade: `events.json` (versão 1). Este documento espelha o JSON; se d
 ## Funis principais
 
 - **Ativação:** `app_opened` → `catalog_loaded` → `onboarding_started(first_run)` → `onboarding_page_viewed` → `onboarding_completed` ou `onboarding_skipped` → `paywall_viewed(post_onboarding)` → `paywall_closed` → `screen_viewed(home, initial)` → `book_opened` → `page_turned` → `book_completed`.
+- **Vitrine do movimento:** a prateleira "Stories that move" é a coleção `animadas` (`Featured.animadas`, marcada por `motion: true` no catalog.json, escrito pelo pipeline ao exportar os clipes). Aparece com duas ou mais histórias.
+- **Navegação até a história:** capa numa prateleira da Home ou na grade da Biblioteca → `book_detail_viewed` → `book_opened` (ou `paywall_viewed(locked_book)` se bloqueado). O carrossel da semana e a faixa de continuar pulam a página do livro e vão direto ao `book_opened`.
 - **Leitura:** `book_opened` → `page_turned` (várias) → `book_completed` (se chegar ao fim) → `reader_closed` (ou `reader_backgrounded` se o app morrer em segundo plano).
 - **Monetização:** `paywall_viewed` → `plan_selected` (opcional) → `subscribe_tapped` → `parental_gate_shown(subscribe)` → `parental_gate_passed` → `purchase_completed` \| `purchase_pending` \| `purchase_cancelled` \| `purchase_failed` → `paywall_closed`; aprovação posterior do Pedir Compra chega como `subscription_status_changed(premium, transaction_update)`.
 - **Livro bloqueado:** `paywall_viewed(locked_book, book_id, book_source)` → `paywall_closed(reason)` → `book_opened` (o livro não abre sozinho depois da compra).
@@ -221,8 +223,8 @@ Fonte da verdade: `events.json` (versão 1). Este documento espelha o JSON; se d
 
 | Propriedade | Tipo | Obrigatória | Valores | Como calcular |
 |---|---|---|---|---|
-| `section` | string | sim | `continue_strip` \| `week_card` \| `just_arrived` \| `collection` \| `all_books` | — |
-| `collection_id` | string | não | `fora-de-casa` \| `quintal` \| `antes-de-dormir` \| `juntos` | só com `section = collection` (`Featured.Collection.id`) |
+| `section` | string | sim | `continue_strip` \| `week_card` \| `just_arrived` \| `collection` \| `all_books` \| `coming_soon` | — |
+| `collection_id` | string | não | `animadas` \| `amigos` \| `fora-de-casa` \| `quintal` \| `antes-de-dormir` \| `juntos` | só com `section = collection` (`Featured.Collection.id`) |
 | `two_halves` | boolean | sim | true \| false | `postura.duasMetades` (Duo aberto na horizontal, iPad deitado) |
 
 ## Biblioteca
@@ -272,6 +274,26 @@ Fonte da verdade: `events.json` (versão 1). Este documento espelha o JSON; se d
 
 ## Leitura
 
+### `book_detail_viewed`
+
+| | |
+|---|---|
+| **Quando dispara** | A página do livro (`BookDetailView`) apareceu, com a capa em movimento tocando. Uma vez por apresentação. |
+| **Onde no app** | Views/BookDetailView.swift: `.task` do corpo, protegido por `registrou` |
+
+| Propriedade | Tipo | Obrigatória | Valores | Como calcular |
+|---|---|---|---|---|
+| `book_id` | string | sim | `^[a-z0-9-]{1,64}$` | slug do catálogo, nunca o título |
+| `book_version` | integer | sim | 0…10000 | `book.version` |
+| `source` | string | sim | `just_arrived` \| `collection` \| `all_books` \| `library_grid` | `OrigemDaLeitura.fonte`. `week_card` e `continue_strip` abrem o leitor direto e nunca chegam aqui |
+| `collection_id` | string | não | `animadas` \| `amigos` \| `fora-de-casa` \| `quintal` \| `antes-de-dormir` \| `juntos` | só com `source = collection` |
+| `position` | integer | não | 0…499 | índice base 0 no trilho/grade |
+| `library_filter` | string | não | `all` \| `available` \| `started` | só com `source = library_grid` |
+| `has_query` | boolean | não | true \| false | só com `source = library_grid` |
+| `locked` | boolean | sim | true \| false | `Store.estaBloqueado(book)`: a página abre bloqueada, e o botão vai ao paywall |
+| `has_progress` | boolean | sim | true \| false | `ReadingProgress.started(book.id)` |
+| `spread_count` | integer | sim | 1…200 | `book.spreads.count` |
+
 ### `book_opened`
 
 | | |
@@ -284,7 +306,7 @@ Fonte da verdade: `events.json` (versão 1). Este documento espelha o JSON; se d
 | `book_id` | string | sim | `^[a-z0-9-]{1,64}$` | slug do catálogo, nunca o título |
 | `book_version` | integer | sim | 0…10000 | `book.version` |
 | `source` | string | sim | `week_card` \| `continue_strip` \| `just_arrived` \| `collection` \| `all_books` \| `library_grid` | `OrigemDaLeitura.fonte` |
-| `collection_id` | string | não | `fora-de-casa` \| `quintal` \| `antes-de-dormir` \| `juntos` | só com `source = collection` |
+| `collection_id` | string | não | `animadas` \| `amigos` \| `fora-de-casa` \| `quintal` \| `antes-de-dormir` \| `juntos` | só com `source = collection` |
 | `position` | integer | não | 0…499 | índice base 0 no trilho/grade; ausente em week_card e continue_strip |
 | `library_filter` | string | não | `all` \| `available` \| `started` | só com `source = library_grid` |
 | `has_query` | boolean | não | true \| false | só com `source = library_grid` |
@@ -408,6 +430,11 @@ Fonte da verdade: `events.json` (versão 1). Este documento espelha o JSON; se d
 | `onboarding_trigger` | string | não | `first_run` \| `replay` | só com `source = post_onboarding` |
 | `products_ready` | boolean | sim | true \| false | `prontos` (os dois planos em memória) |
 | `trial_eligible` | boolean | sim | true \| false | `store.trialEligible` |
+| `install_age_bucket` | string | não | `lt_1d` \| `1_3d` \| `3_7d` \| `7_30d` \| `30_90d` \| `gte_90d` \| `unknown` | `Faixa.idadeDaInstalacao`: tempo desde a primeira abertura com a medição da jornada (Services/Jornada.swift). `unknown` em instalações anteriores a ela |
+| `prior_paywall_views_bucket` | string | não | `0` \| `1` \| `2_4` \| `5_9` \| `gte_10` \| `unknown` | `Faixa.jornada`: paywalls vistos antes deste neste aparelho (`0` = primeira vez). Contador local, nunca sai cru |
+| `books_completed_bucket` | string | não | `0` \| `1` \| `2_4` \| `5_9` \| `gte_10` \| `unknown` | `Faixa.jornada`: `book_completed` registrados neste aparelho antes deste paywall |
+
+As três faixas da jornada saem do `Analytics.track`, não da `PaywallView`, e só contam com o analytics ligado. Não há identificador: são faixas largas que muitos aparelhos compartilham, e o painel só as usa agregadas, na conversão por segmento.
 
 ### `plan_selected`
 
@@ -444,7 +471,7 @@ Fonte da verdade: `events.json` (versão 1). Este documento espelha o JSON; se d
 
 | Propriedade | Tipo | Obrigatória | Valores | Como calcular |
 |---|---|---|---|---|
-| `purpose` | string | sim | `subscribe` \| `manage_subscription` | subscribe (PaywallView) ou manage_subscription (ParentsView) |
+| `purpose` | string | sim | `subscribe` \| `manage_subscription` \| `external_link` | subscribe (PaywallView), manage_subscription ou external_link (ParentsView: Terms e Privacy) |
 
 ### `parental_gate_passed`
 
@@ -455,7 +482,7 @@ Fonte da verdade: `events.json` (versão 1). Este documento espelha o JSON; se d
 
 | Propriedade | Tipo | Obrigatória | Valores | Como calcular |
 |---|---|---|---|---|
-| `purpose` | string | sim | `subscribe` \| `manage_subscription` | — |
+| `purpose` | string | sim | `subscribe` \| `manage_subscription` \| `external_link` | — |
 | `failed_attempts` | integer | sim | 0…99 | `erros` nesta apresentação |
 | `was_paused` | boolean | sim | true \| false | houve ao menos uma pausa de 10 s |
 | `duration_bucket` | string | sim | `lt_5s` \| `5_15s` \| `15_30s` \| `30_60s` \| `1_3m` \| `gte_3m` | desde `parental_gate_shown` |
@@ -469,7 +496,7 @@ Fonte da verdade: `events.json` (versão 1). Este documento espelha o JSON; se d
 
 | Propriedade | Tipo | Obrigatória | Valores | Como calcular |
 |---|---|---|---|---|
-| `purpose` | string | sim | `subscribe` \| `manage_subscription` | — |
+| `purpose` | string | sim | `subscribe` \| `manage_subscription` \| `external_link` | — |
 | `consecutive_errors` | integer | sim | 1…3 | `errosSeguidos` |
 | `caused_pause` | boolean | sim | true \| false | `pausado` depois da decisão |
 
@@ -482,7 +509,7 @@ Fonte da verdade: `events.json` (versão 1). Este documento espelha o JSON; se d
 
 | Propriedade | Tipo | Obrigatória | Valores | Como calcular |
 |---|---|---|---|---|
-| `purpose` | string | sim | `subscribe` \| `manage_subscription` | — |
+| `purpose` | string | sim | `subscribe` \| `manage_subscription` \| `external_link` | — |
 | `failed_attempts` | integer | sim | 0…99 | `erros` |
 | `while_paused` | boolean | sim | true \| false | `pausado` |
 | `had_partial_answer` | boolean | sim | true \| false | `!resposta.isEmpty`; nunca os dígitos |

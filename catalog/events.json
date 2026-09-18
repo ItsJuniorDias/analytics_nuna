@@ -115,8 +115,8 @@
     "home_section_viewed": {
       "description": "A Home section became at least 50% visible. Deduplicated to once per section per session.",
       "properties": {
-        "section": {"type": "string", "required": true, "enum": ["continue_strip", "week_card", "just_arrived", "collection", "all_books"]},
-        "collection_id": {"type": "string", "required": false, "enum": ["fora-de-casa", "quintal", "antes-de-dormir", "juntos"]},
+        "section": {"type": "string", "required": true, "enum": ["continue_strip", "week_card", "just_arrived", "collection", "all_books", "coming_soon"]},
+        "collection_id": {"type": "string", "required": false, "enum": ["animadas", "amigos", "fora-de-casa", "quintal", "antes-de-dormir", "juntos"]},
         "two_halves": {"type": "boolean", "required": true}
       }
     },
@@ -148,13 +148,28 @@
         "has_query": {"type": "boolean", "required": true}
       }
     },
+    "book_detail_viewed": {
+      "description": "The book page (BookDetailView) is on screen with the animated cover playing (once per presentation). Entry point for reading, or for the paywall when the book is locked. The week carousel and the continue strip open the reader directly and never emit this.",
+      "properties": {
+        "book_id": {"type": "string", "required": true, "pattern": "^[a-z0-9-]{1,64}$"},
+        "book_version": {"type": "integer", "required": true, "minimum": 0, "maximum": 10000},
+        "source": {"type": "string", "required": true, "enum": ["just_arrived", "collection", "all_books", "library_grid"]},
+        "collection_id": {"type": "string", "required": false, "enum": ["animadas", "amigos", "fora-de-casa", "quintal", "antes-de-dormir", "juntos"]},
+        "position": {"type": "integer", "required": false, "minimum": 0, "maximum": 499},
+        "library_filter": {"type": "string", "required": false, "enum": ["all", "available", "started"]},
+        "has_query": {"type": "boolean", "required": false},
+        "locked": {"type": "boolean", "required": true},
+        "has_progress": {"type": "boolean", "required": true},
+        "spread_count": {"type": "integer", "required": true, "minimum": 1, "maximum": 200}
+      }
+    },
     "book_opened": {
       "description": "The reader is on screen and measured for a readable book (once per reader presentation). Also the reader screen view.",
       "properties": {
         "book_id": {"type": "string", "required": true, "pattern": "^[a-z0-9-]{1,64}$"},
         "book_version": {"type": "integer", "required": true, "minimum": 0, "maximum": 10000},
         "source": {"type": "string", "required": true, "enum": ["week_card", "continue_strip", "just_arrived", "collection", "all_books", "library_grid"]},
-        "collection_id": {"type": "string", "required": false, "enum": ["fora-de-casa", "quintal", "antes-de-dormir", "juntos"]},
+        "collection_id": {"type": "string", "required": false, "enum": ["animadas", "amigos", "fora-de-casa", "quintal", "antes-de-dormir", "juntos"]},
         "position": {"type": "integer", "required": false, "minimum": 0, "maximum": 499},
         "library_filter": {"type": "string", "required": false, "enum": ["all", "available", "started"]},
         "has_query": {"type": "boolean", "required": false},
@@ -237,7 +252,7 @@
       }
     },
     "paywall_viewed": {
-      "description": "The subscription paywall appeared (once per presentation).",
+      "description": "The subscription paywall appeared (once per presentation). Carries the device-computed journey buckets (no identifier): install age, earlier paywall views and completed books.",
       "properties": {
         "source": {"type": "string", "required": true, "enum": ["post_onboarding", "home_header", "locked_book", "parents"]},
         "book_id": {"type": "string", "required": false, "pattern": "^[a-z0-9-]{1,64}$"},
@@ -245,7 +260,10 @@
         "has_saved_progress": {"type": "boolean", "required": false},
         "onboarding_trigger": {"type": "string", "required": false, "enum": ["first_run", "replay"]},
         "products_ready": {"type": "boolean", "required": true},
-        "trial_eligible": {"type": "boolean", "required": true}
+        "trial_eligible": {"type": "boolean", "required": true},
+        "install_age_bucket": {"type": "string", "required": false, "enum": ["lt_1d", "1_3d", "3_7d", "7_30d", "30_90d", "gte_90d", "unknown"]},
+        "prior_paywall_views_bucket": {"type": "string", "required": false, "enum": ["0", "1", "2_4", "5_9", "gte_10", "unknown"]},
+        "books_completed_bucket": {"type": "string", "required": false, "enum": ["0", "1", "2_4", "5_9", "gte_10", "unknown"]}
       }
     },
     "plan_selected": {
@@ -267,13 +285,13 @@
     "parental_gate_shown": {
       "description": "The 'Grown-ups only' multiplication gate appeared (once per presentation).",
       "properties": {
-        "purpose": {"type": "string", "required": true, "enum": ["subscribe", "manage_subscription"]}
+        "purpose": {"type": "string", "required": true, "enum": ["subscribe", "manage_subscription", "external_link"]}
       }
     },
     "parental_gate_passed": {
-      "description": "Correct answer; the gate closes and the purchase or Manage Subscriptions sheet follows.",
+      "description": "Correct answer; the gate closes and the purchase, the Manage Subscriptions sheet or the external link (Terms, Privacy) follows.",
       "properties": {
-        "purpose": {"type": "string", "required": true, "enum": ["subscribe", "manage_subscription"]},
+        "purpose": {"type": "string", "required": true, "enum": ["subscribe", "manage_subscription", "external_link"]},
         "failed_attempts": {"type": "integer", "required": true, "minimum": 0, "maximum": 99},
         "was_paused": {"type": "boolean", "required": true},
         "duration_bucket": {"type": "string", "required": true, "enum": ["lt_5s", "5_15s", "15_30s", "30_60s", "1_3m", "gte_3m"]}
@@ -282,7 +300,7 @@
     "parental_gate_failed": {
       "description": "Wrong answer submitted; a new question appears. The third consecutive error pauses the keypad for 10 s.",
       "properties": {
-        "purpose": {"type": "string", "required": true, "enum": ["subscribe", "manage_subscription"]},
+        "purpose": {"type": "string", "required": true, "enum": ["subscribe", "manage_subscription", "external_link"]},
         "consecutive_errors": {"type": "integer", "required": true, "minimum": 1, "maximum": 3},
         "caused_pause": {"type": "boolean", "required": true}
       }
@@ -290,7 +308,7 @@
     "parental_gate_cancelled": {
       "description": "The gate was closed without a correct answer.",
       "properties": {
-        "purpose": {"type": "string", "required": true, "enum": ["subscribe", "manage_subscription"]},
+        "purpose": {"type": "string", "required": true, "enum": ["subscribe", "manage_subscription", "external_link"]},
         "failed_attempts": {"type": "integer", "required": true, "minimum": 0, "maximum": 99},
         "while_paused": {"type": "boolean", "required": true},
         "had_partial_answer": {"type": "boolean", "required": true}

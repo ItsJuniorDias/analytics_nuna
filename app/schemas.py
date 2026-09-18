@@ -188,3 +188,68 @@ class PaywallResponse(BaseModel):
     by_storefront: List[PaywallStorefrontRow]
 
     model_config = ConfigDict(populate_by_name=True)
+
+
+# Conversão do paywall ---------------------------------------------------------
+
+
+class PaywallFunnelStep(BaseModel):
+    key: str
+    name: str
+    sessions: int
+    conversion_from_previous: Optional[float] = None
+    conversion_from_first: Optional[float] = None
+
+
+class ConversionSegment(BaseModel):
+    value: Scalar = None
+    sessions: int
+    subscribe_tapped: int
+    gate_passed: int
+    purchased: int
+    conversion: Optional[float] = None
+
+
+class PaywallConversionResponse(BaseModel):
+    from_: str = Field(alias="from")
+    to: str
+    by: Optional[str] = None
+    steps: List[PaywallFunnelStep]
+    segments: List[ConversionSegment]
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class TimelineEvent(BaseModel):
+    name: str
+    ts: str
+    subscription_state: str
+    properties: Dict[str, Scalar]
+
+
+class PaywallSessionRow(BaseModel):
+    """Um lançamento anônimo do app. Sem session_id nem event_id de propósito."""
+
+    first_view_at: str
+    storefront: Optional[str] = None
+    device_family: str
+    app_version: str
+    source: Optional[str] = None
+    trial_eligible: Optional[bool] = None
+    install_age_bucket: Optional[str] = None
+    prior_paywall_views_bucket: Optional[str] = None
+    books_completed_bucket: Optional[str] = None
+    furthest_step: str
+    purchased: bool
+    event_count: int
+    events: List[TimelineEvent]
+
+
+class PaywallSessionsResponse(BaseModel):
+    from_: str = Field(alias="from")
+    to: str
+    outcome: str
+    total: int
+    sessions: List[PaywallSessionRow]
+
+    model_config = ConfigDict(populate_by_name=True)

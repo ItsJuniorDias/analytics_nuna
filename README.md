@@ -27,6 +27,8 @@ O público é criança. A Apple (diretriz 1.3, categoria Kids, e 5.1.2) proíbe 
 
 **Sem identificadores.** Nada de IDFA, IDFV, id de instalação, de conta ou de transação da StoreKit, token de push, nome ou modelo do aparelho. O único id é o `session_id`: UUID aleatório criado a cada lançamento, só em memória, trocado depois de 30 minutos em segundo plano. Ele não reconhece a mesma criança amanhã, então não é identificador persistente. O `event_id` é outro UUID aleatório, por evento, usado só para descartar reenvios.
 
+**Jornada sem id.** Para saber quem converte sem seguir ninguém, o `paywall_viewed` leva três faixas calculadas no aparelho (`Services/Jornada.swift` no app): idade da instalação, paywalls vistos antes e livros concluídos. Os contadores ficam só no aparelho e saem apenas como faixa larga (`lt_1d`, `2_4`, `gte_10`…), que muitos aparelhos compartilham. Um hash estável por aparelho foi descartado de propósito: continuaria sendo identificador persistente (COPPA) e mudaria as respostas de App Privacy para *Identifiers* e *Linked to the user*.
+
 **Sem texto livre.** Toda string do catálogo é enum fechado ou tem padrão estrito (`book_id` é o slug público do livro, `^[a-z0-9-]{1,64}$`). A busca manda só uma faixa de tamanho, erros mandam só uma categoria. O carregador do catálogo recusa subir se alguém adicionar uma string sem enum nem padrão, ou um inteiro sem limites.
 
 **Validação estrita.** Evento com nome desconhecido, propriedade fora do catálogo, enum inválido, tipo errado, `null`, padrão que não bate ou inteiro fora da faixa é rejeitado com motivo, nunca aceito "em parte". Assim um bug no app não consegue contrabandear texto para o banco. O motivo devolvido nunca ecoa o valor recebido.
@@ -39,7 +41,7 @@ O público é criança. A Apple (diretriz 1.3, categoria Kids, e 5.1.2) proíbe 
 **Sem ligar sessões entre si.** Um upload pode trazer várias sessões do mesmo aparelho (a fila acumula dias). Para não deixar essa ligação gravada:
 - `received_at` guarda só o **dia** UTC da chegada, não o horário.
 - A tabela `events` é `WITHOUT ROWID` com chave no `event_id` aleatório: não há rowid sequencial que revele quais linhas chegaram juntas.
-- As rotas de estatística só devolvem contagens; nenhuma devolve `session_id`, `event_id` ou linha individual, e `by=session_id` é recusado.
+- Nenhuma rota de estatística devolve `session_id` ou `event_id`, e `by=session_id` é recusado. Todas devolvem só contagens, com uma exceção: `/v1/stats/paywall/sessions` mostra lançamentos individuais que viram o paywall, com os próprios eventos, para entender a jornada até a compra. Sem id nenhum, até 50 por vez, e cada linha é um lançamento, não uma pessoa.
 - Funis são calculados dentro de uma sessão, nunca entre sessões.
 
 **Retenção.** Eventos individuais são apagados após 180 dias (automático, dentro do serviço). Antes de apagar, os totais por dia e nome vão para `daily_event_counts`, que não tem `session_id`. A exclusão usa `PRAGMA secure_delete` e trunca o WAL.
@@ -211,8 +213,12 @@ Todas exigem `Authorization: Bearer $NUNA_ADMIN_TOKEN` (sem token configurado, r
 | `/v1/stats/funnel` | `steps`, `from`, `to` | sessões que fizeram os passos **nesta ordem** (não precisam ser seguidos), com conversão do passo anterior e do primeiro |
 | `/v1/stats/books` | `from`, `to` | por `book_id`: aberturas, sessões, conclusões e taxa de conclusão |
 | `/v1/stats/paywall` | `from`, `to` | visualizações por origem, toques em assinar por plano, portão dos pais (mostrado, passou, errou, cancelou, taxa) por propósito, compras por plano e resultado, fechamentos por motivo, restaurações por resultado |
+| `/v1/stats/paywall/conversion` | `by`, `from`, `to` | funil de compra por sessão (`viewed` → `subscribe_tapped` → `gate_passed` → `purchased`) com conversão de cada passo; com `by`, a mesma conta por segmento da primeira visualização: `storefront`, `source`, `trial_eligible`, `install_age_bucket`, `prior_paywall_views_bucket`, `books_completed_bucket`, `device_family`, `app_version` |
+| `/v1/stats/paywall/sessions` | `outcome=all\|purchased\|not_purchased`, `limit` (1 a 50), `from`, `to` | sessões que viram o paywall, mais recentes primeiro: país, origem, faixas da jornada, até onde chegaram e os próprios eventos em ordem. Sem `session_id` nem `event_id` |
 
 `steps` do funil: 2 a 10 passos separados por vírgula, cada um `evento` ou `evento:prop=valor[:prop=valor]`. Eventos no mesmo milissegundo contam na ordem do funil; um passo repetido exige dois eventos.
+
+Conversão do paywall: a sessão entra pela primeira `paywall_viewed` do período e os passos seguintes precisam vir depois, na mesma sessão. `plan_selected` fica fora do funil porque é opcional (o plano pré-selecionado basta). Compra feita em outro lançamento não é ligada à visualização: é o preço de não ter identificador.
 
 ```bash
 TOKEN=$NUNA_ADMIN_TOKEN
@@ -221,11 +227,13 @@ curl -sS -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:8000/v1/stats/event
 curl -sS -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:8000/v1/stats/funnel?steps=paywall_viewed:source=locked_book,subscribe_tapped,parental_gate_passed:purpose=subscribe,purchase_completed"
 curl -sS -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:8000/v1/stats/books?from=2026-09-01"
 curl -sS -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:8000/v1/stats/paywall"
+curl -sS -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:8000/v1/stats/paywall/conversion?by=storefront"
+curl -sS -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:8000/v1/stats/paywall/sessions?outcome=purchased&limit=20"
 ```
 
 ### Painel: `GET /`
 
-HTML, CSS e JS próprios, sem CDN (a CSP proíbe qualquer origem externa). A página não tem dados: pede o token de admin, guarda em `sessionStorage` (some quando a aba fecha) e chama as rotas acima. Mostra visão geral com gráficos de barras em SVG, funis prontos (Ativação, Leitura, Monetização, Livro bloqueado), livros, paywall e um explorador por evento. Todo gráfico tem tabela equivalente.
+HTML, CSS e JS próprios, sem CDN (a CSP proíbe qualquer origem externa). A página não tem dados: pede o token de admin, guarda em `sessionStorage` (some quando a aba fecha) e chama as rotas acima. Abre pela conversão do paywall (funil de compra e conversão por país, origem, teste grátis e faixas da jornada), seguida das sessões no paywall (cada uma abre os próprios eventos, numerada pela posição na lista), do paywall em detalhe, da visão geral com gráficos de barras em SVG, dos funis prontos (Ativação, Leitura, Monetização, Livro bloqueado), dos livros e de um explorador por evento. Todo gráfico tem tabela equivalente.
 
 ## Rodar localmente
 
